@@ -19,6 +19,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,6 +63,18 @@ public class Invoice extends Auditory {
 
     @Column(name = "total_amount_local", precision = 19, scale = 2)
     private BigDecimal totalAmountLocal;
+
+    @Column(name = "applies_iva")
+    private Boolean appliesIva = Boolean.FALSE;
+
+    @Column(name = "tax_rate", precision = 5, scale = 2)
+    private BigDecimal taxRate = BigDecimal.ZERO;
+
+    @Column(name = "tax_amount", precision = 19, scale = 2)
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
+    @Column(name = "subtotal", precision = 19, scale = 2)
+    private BigDecimal subtotal;
 
     @Column(name = "rate_date")
     private LocalDateTime rateDate;
@@ -117,7 +130,7 @@ public class Invoice extends Auditory {
         detail.setInvoice(null);
     }
 
-    // Recalculate totals based on line items and exchange rate
+    // Recalculate totals based on line items, tax rate, and exchange rate
     public void recalculateTotals() {
         BigDecimal sum = BigDecimal.ZERO;
         for (InvoiceDetail detail : details) {
@@ -125,10 +138,58 @@ public class Invoice extends Auditory {
                 sum = sum.add(detail.getSubtotal());
             }
         }
-        this.totalAmountUsd = sum;
-        if (this.exchangeRate != null && this.exchangeRate.compareTo(BigDecimal.ZERO) > 0) {
-            this.totalAmountLocal = this.totalAmountUsd.multiply(this.exchangeRate);
+        this.subtotal = sum.setScale(2, RoundingMode.HALF_UP);
+
+        if (Boolean.TRUE.equals(this.appliesIva) && this.taxRate != null && this.taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            this.taxAmount = this.subtotal.multiply(this.taxRate)
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            this.totalAmountUsd = this.subtotal.add(this.taxAmount).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            this.taxAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            this.totalAmountUsd = this.subtotal;
         }
+
+        if (this.exchangeRate != null && this.exchangeRate.compareTo(BigDecimal.ZERO) > 0) {
+            this.totalAmountLocal = this.totalAmountUsd.multiply(this.exchangeRate).setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    public Boolean getAppliesIva() {
+        return appliesIva;
+    }
+
+    public void setAppliesIva(Boolean appliesIva) {
+        this.appliesIva = appliesIva;
+    }
+
+    public BigDecimal getTaxRate() {
+        return taxRate;
+    }
+
+    public void setTaxRate(BigDecimal taxRate) {
+        this.taxRate = taxRate;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getSubtotal() {
+        if (subtotal != null && subtotal.compareTo(BigDecimal.ZERO) > 0) {
+            return subtotal;
+        }
+        if (totalAmountUsd != null && totalAmountUsd.compareTo(BigDecimal.ZERO) > 0) {
+            return totalAmountUsd;
+        }
+        return subtotal != null ? subtotal : BigDecimal.ZERO;
+    }
+
+    public void setSubtotal(BigDecimal subtotal) {
+        this.subtotal = subtotal;
     }
 
     // Getters and Setters
@@ -307,6 +368,10 @@ public class Invoice extends Auditory {
                 ", status=" + status +
                 ", targetCurrency='" + targetCurrency + '\'' +
                 ", exchangeRate=" + exchangeRate +
+                ", subtotal=" + subtotal +
+                ", appliesIva=" + appliesIva +
+                ", taxRate=" + taxRate +
+                ", taxAmount=" + taxAmount +
                 ", totalAmountUsd=" + totalAmountUsd +
                 ", totalAmountLocal=" + totalAmountLocal +
                 ", rateDate=" + rateDate +

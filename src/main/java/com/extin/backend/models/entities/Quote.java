@@ -18,6 +18,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,8 +65,29 @@ public class Quote extends Auditory {
     @Column(name = "converted_total_amount", precision = 19, scale = 2)
     private BigDecimal convertedTotalAmount;
 
+    @Column(name = "applies_iva")
+    private Boolean appliesIva = Boolean.FALSE;
+
+    @Column(name = "tax_rate", precision = 5, scale = 2)
+    private BigDecimal taxRate = BigDecimal.ZERO;
+
+    @Column(name = "tax_amount", precision = 19, scale = 2)
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
+    @Column(name = "subtotal", precision = 19, scale = 2)
+    private BigDecimal subtotal;
+
     @Column(name = "notes", length = 1000)
     private String notes;
+
+    @Column(name = "customer_city", length = 100)
+    private String customerCity;
+
+    @Column(name = "customer_address", length = 500)
+    private String customerAddress;
+
+    @Column(name = "document_number", length = 50)
+    private String documentNumber;
 
     @OneToMany(mappedBy = "quote", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<QuoteDetail> details = new ArrayList<>();
@@ -94,7 +116,7 @@ public class Quote extends Auditory {
         detail.setQuote(null);
     }
 
-    // Recalculate totals based on line items and exchange rate
+    // Recalculate totals based on line items, tax rate, and exchange rate
     public void recalculateTotals() {
         BigDecimal sum = BigDecimal.ZERO;
         for (QuoteDetail detail : details) {
@@ -102,10 +124,58 @@ public class Quote extends Auditory {
                 sum = sum.add(detail.getSubtotal());
             }
         }
-        this.totalAmount = sum;
-        if (this.exchangeRate != null && this.exchangeRate.compareTo(BigDecimal.ZERO) > 0) {
-            this.convertedTotalAmount = this.totalAmount.multiply(this.exchangeRate);
+        this.subtotal = sum.setScale(2, RoundingMode.HALF_UP);
+
+        if (Boolean.TRUE.equals(this.appliesIva) && this.taxRate != null && this.taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            this.taxAmount = this.subtotal.multiply(this.taxRate)
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            this.totalAmount = this.subtotal.add(this.taxAmount).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            this.taxAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            this.totalAmount = this.subtotal;
         }
+
+        if (this.exchangeRate != null && this.exchangeRate.compareTo(BigDecimal.ZERO) > 0) {
+            this.convertedTotalAmount = this.totalAmount.multiply(this.exchangeRate).setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    public Boolean getAppliesIva() {
+        return appliesIva;
+    }
+
+    public void setAppliesIva(Boolean appliesIva) {
+        this.appliesIva = appliesIva;
+    }
+
+    public BigDecimal getTaxRate() {
+        return taxRate;
+    }
+
+    public void setTaxRate(BigDecimal taxRate) {
+        this.taxRate = taxRate;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getSubtotal() {
+        if (subtotal != null && subtotal.compareTo(BigDecimal.ZERO) > 0) {
+            return subtotal;
+        }
+        if (totalAmount != null && totalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            return totalAmount;
+        }
+        return subtotal != null ? subtotal : BigDecimal.ZERO;
+    }
+
+    public void setSubtotal(BigDecimal subtotal) {
+        this.subtotal = subtotal;
     }
 
     // Getters and Setters
@@ -166,7 +236,13 @@ public class Quote extends Auditory {
     }
 
     public BigDecimal getTotalAmount() {
-        return totalAmount;
+        if (totalAmount != null && totalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            return totalAmount;
+        }
+        if (subtotal != null && subtotal.compareTo(BigDecimal.ZERO) > 0) {
+            return subtotal;
+        }
+        return totalAmount != null ? totalAmount : BigDecimal.ZERO;
     }
 
     public void setTotalAmount(BigDecimal totalAmount) {
@@ -187,6 +263,30 @@ public class Quote extends Auditory {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public String getCustomerCity() {
+        return customerCity;
+    }
+
+    public void setCustomerCity(String customerCity) {
+        this.customerCity = customerCity;
+    }
+
+    public String getCustomerAddress() {
+        return customerAddress;
+    }
+
+    public void setCustomerAddress(String customerAddress) {
+        this.customerAddress = customerAddress;
+    }
+
+    public String getDocumentNumber() {
+        return documentNumber;
+    }
+
+    public void setDocumentNumber(String documentNumber) {
+        this.documentNumber = documentNumber;
     }
 
     public List<QuoteDetail> getDetails() {
@@ -215,9 +315,16 @@ public class Quote extends Auditory {
                 "id=" + id +
                 ", issueDate=" + issueDate +
                 ", status=" + status +
+                ", customerCity='" + customerCity + '\'' +
+                ", customerAddress='" + customerAddress + '\'' +
+                ", documentNumber='" + documentNumber + '\'' +
                 ", baseCurrency='" + baseCurrency + '\'' +
                 ", targetCurrency='" + targetCurrency + '\'' +
                 ", exchangeRate=" + exchangeRate +
+                ", subtotal=" + subtotal +
+                ", appliesIva=" + appliesIva +
+                ", taxRate=" + taxRate +
+                ", taxAmount=" + taxAmount +
                 ", totalAmount=" + totalAmount +
                 ", convertedTotalAmount=" + convertedTotalAmount +
                 '}';

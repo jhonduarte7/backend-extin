@@ -28,12 +28,12 @@ public class AdminCustomerController {
 
     /**
      * Search customers with pagination.
-     * Default page size is 10 records per page.
+     * Default page size is 5 records per page.
      */
     @GetMapping
     public ResponseEntity<Page<CustomerResponseDto>> searchCustomers(
             @RequestParam(name = "query", required = false) String query,
-            @PageableDefault(size = 10, sort = "businessName", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(size = 5, sort = "businessName", direction = Sort.Direction.ASC) Pageable pageable) {
 
         Page<CustomerResponseDto> customers = customerService.searchCustomers(query, pageable);
         return ResponseEntity.ok(customers);

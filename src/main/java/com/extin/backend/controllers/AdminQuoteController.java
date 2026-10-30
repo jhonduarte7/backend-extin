@@ -9,6 +9,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,8 +34,26 @@ public class AdminQuoteController {
     @GetMapping
     public ResponseEntity<Page<QuoteResponseDto>> getAllQuotes(
             @RequestParam(value = "status", required = false) QuoteStatus status,
-            @PageableDefault(size = 10, sort = "issueDate", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 5, sort = "issueDate", direction = Sort.Direction.DESC) Pageable pageable) {
 
         return ResponseEntity.ok(quoteService.getAllQuotes(status, pageable));
+    }
+
+    /**
+     * Retrieves quote details by ID.
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<QuoteResponseDto> getQuoteById(@PathVariable("id") java.util.UUID id) {
+        return ResponseEntity.ok(quoteService.getQuoteDtoById(id));
+    }
+
+    /**
+     * Updates quote lifecycle status (e.g. APPROVED, PENDING, CANCELLED).
+     */
+    @org.springframework.web.bind.annotation.PatchMapping("/{id}/status")
+    public ResponseEntity<QuoteResponseDto> updateQuoteStatus(
+            @PathVariable("id") java.util.UUID id,
+            @RequestParam("status") QuoteStatus status) {
+        return ResponseEntity.ok(quoteService.updateQuoteStatus(id, status));
     }
 }

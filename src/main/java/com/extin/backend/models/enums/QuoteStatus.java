@@ -5,7 +5,7 @@ package com.extin.backend.models.enums;
  * - PENDING: Initial state, quote submitted or draft.
  * - APPROVED: Approved by the customer / manager, ready for invoicing.
  * - REJECTED: Declined by the customer.
- * - INVOICED: Converted into an official fiscal invoice.
+ * - INVOICED: Facturado - Converted into an official cash invoice (factura de contado).
  */
 public enum QuoteStatus {
     PENDING,

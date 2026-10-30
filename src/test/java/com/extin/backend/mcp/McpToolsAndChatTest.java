@@ -28,6 +28,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -235,6 +236,31 @@ class McpToolsAndChatTest {
 
             assertThat(memory).isNotNull();
         }
+
+        @Test
+        @DisplayName("restClientCustomizer - Should configure connect and read timeouts (>= 120s)")
+        void testRestClientCustomizerBean() {
+            McpClientConfig config = new McpClientConfig();
+            org.springframework.boot.restclient.RestClientCustomizer customizer = config.restClientCustomizer();
+            assertThat(customizer).isNotNull();
+
+            org.springframework.web.client.RestClient.Builder builder = org.springframework.web.client.RestClient.builder();
+            customizer.customize(builder);
+            assertThat(builder).isNotNull();
+        }
+
+        @Test
+        @DisplayName("webClientCustomizer - Should configure response timeout on WebClient builder")
+        void testWebClientCustomizerBean() {
+            McpClientConfig config = new McpClientConfig();
+            org.springframework.boot.webclient.WebClientCustomizer customizer = config.webClientCustomizer();
+            assertThat(customizer).isNotNull();
+
+            org.springframework.web.reactive.function.client.WebClient.Builder builder =
+                    org.springframework.web.reactive.function.client.WebClient.builder();
+            customizer.customize(builder);
+            assertThat(builder).isNotNull();
+        }
     }
 
     @Nested
@@ -249,6 +275,9 @@ class McpToolsAndChatTest {
 
         @Mock
         private ChatClient.CallResponseSpec callResponseSpec;
+
+        @Mock
+        private ChatClient.StreamResponseSpec streamResponseSpec;
 
         @Mock
         private CustomerEquipmentRepository customerEquipmentRepository;
@@ -304,6 +333,89 @@ class McpToolsAndChatTest {
 
             assertThat(reply).contains("⚠️ **Error en el Asistente IA:**");
             assertThat(reply).contains("Connection refused to Ollama");
+        }
+
+        @Test
+        @DisplayName("processChat - Should catch timeout exceptions and return Modo Contingencia")
+        void testProcessChatTimeoutContingencyFallback() {
+            when(chatClient.prompt()).thenReturn(requestSpec);
+            when(requestSpec.system(anyString())).thenReturn(requestSpec);
+            when(requestSpec.user(anyString())).thenReturn(requestSpec);
+            when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+            when(requestSpec.call()).thenThrow(new org.springframework.web.client.ResourceAccessException("Read timed out after 120000ms"));
+
+            String reply = chatService.processChat("session-101", "¿Cuál es el extintor adecuado?");
+
+            assertThat(reply).contains("Modo Contingencia");
+            assertThat(reply).contains("excedió el tiempo de espera configurado (120s)");
+            assertThat(reply).contains("Read timed out after 120000ms");
+        }
+
+        @Test
+        @DisplayName("streamChat - Should stream tokens via Flux")
+        void testStreamChatSuccess() {
+            when(chatClient.prompt()).thenReturn(requestSpec);
+            when(requestSpec.system(eq(ChatService.SYSTEM_PROMPT))).thenReturn(requestSpec);
+            when(requestSpec.user("¿Qué extintor sirve para servidores?")).thenReturn(requestSpec);
+            when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+            when(requestSpec.stream()).thenReturn(streamResponseSpec);
+            when(streamResponseSpec.content()).thenReturn(Flux.just("Extintor ", "CO2 ", "5 Lbs"));
+
+            Flux<String> flux = chatService.streamChat("session-101", "¿Qué extintor sirve para servidores?");
+            List<String> tokens = flux.collectList().block();
+
+            assertThat(tokens).containsExactly("Extintor ", "CO2 ", "5 Lbs");
+        }
+
+        @Test
+        @DisplayName("streamChat - Should handle stream errors with Modo Contingencia fallback")
+        void testStreamChatErrorFallback() {
+            when(chatClient.prompt()).thenReturn(requestSpec);
+            when(requestSpec.system(anyString())).thenReturn(requestSpec);
+            when(requestSpec.user(anyString())).thenReturn(requestSpec);
+            when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+            when(requestSpec.stream()).thenReturn(streamResponseSpec);
+            when(streamResponseSpec.content()).thenReturn(Flux.error(new org.springframework.web.client.ResourceAccessException("Read timed out")));
+
+            Flux<String> flux = chatService.streamChat("session-101", "Consulta");
+            List<String> tokens = flux.collectList().block();
+
+            assertThat(tokens).hasSize(1);
+            assertThat(tokens.get(0)).contains("Modo Contingencia");
+        }
+
+        @Test
+        @DisplayName("resolveUniqueToolCallbacks - Should extract distinct tools with no duplicates")
+        void testResolveUniqueToolCallbacks() {
+            CatalogTools catTools = new CatalogTools(null);
+            CustomerTools custTools = new CustomerTools(customerRepository, customerEquipmentRepository);
+            DocumentTools docTools = new DocumentTools(null);
+
+            List<org.springframework.ai.tool.ToolCallback> callbacks =
+                    ChatService.resolveUniqueToolCallbacks(catTools, custTools, docTools);
+
+            assertThat(callbacks).hasSize(3);
+            List<String> names = callbacks.stream().map(c -> c.getToolDefinition().name()).toList();
+            assertThat(names).containsExactlyInAnyOrder("semanticProductSearch", "getCustomerHistory", "searchInManuals");
+        }
+
+        @Test
+        @DisplayName("resolveUniqueToolCallbacks - Should deduplicate when duplicate tool beans are provided")
+        void testResolveUniqueToolCallbacksWithDuplicates() {
+            CatalogTools catTools = new CatalogTools(null);
+            CustomerTools custTools = new CustomerTools(customerRepository, customerEquipmentRepository);
+            DocumentTools docTools = new DocumentTools(null);
+
+            // Pass duplicate instances of each tool bean
+            List<org.springframework.ai.tool.ToolCallback> callbacks =
+                    ChatService.resolveUniqueToolCallbacks(catTools, catTools, custTools, custTools, docTools, docTools);
+
+            assertThat(callbacks).hasSize(3);
+            List<String> names = callbacks.stream().map(c -> c.getToolDefinition().name()).toList();
+            assertThat(names).containsExactlyInAnyOrder("semanticProductSearch", "getCustomerHistory", "searchInManuals");
+
+            // Asserts that Spring AI validation succeeds without throwing IllegalStateException
+            org.springframework.ai.model.tool.ToolCallingChatOptions.validateToolCallbacks(callbacks);
         }
     }
 
@@ -366,6 +478,20 @@ class McpToolsAndChatTest {
             assertThat(response.getBody()).isEqualTo(expectedMarkdown);
             assertThat(response.getHeaders().getContentType().toString()).contains("text/markdown");
             verify(chatService).processChat(eq("default-chat-session"), eq("Información"));
+        }
+
+        @Test
+        @DisplayName("POST /api/admin/chat/mcp (Streaming) - Should delegate to ChatService streamChat")
+        void testChatStreamEndpoint() {
+            when(chatService.streamChat(eq("stream-chat-id"), eq("Recomendación")))
+                    .thenReturn(Flux.just("Token1 ", "Token2"));
+
+            ChatRequestDto requestDto = new ChatRequestDto("Recomendación", "stream-chat-id");
+            Flux<String> stream = controller.chatStream(requestDto, null);
+
+            List<String> tokens = stream.collectList().block();
+            assertThat(tokens).containsExactly("Token1 ", "Token2");
+            verify(chatService).streamChat(eq("stream-chat-id"), eq("Recomendación"));
         }
     }
 }

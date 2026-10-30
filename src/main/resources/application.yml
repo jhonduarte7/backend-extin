@@ -10,6 +10,12 @@ spring:
       max-file-size: 25MB
       max-request-size: 25MB
 
+  # HTTP Client global timeouts for RestClient and WebClient
+  http:
+    clients:
+      connect-timeout: 120s
+      read-timeout: 180s
+
   datasource:
     url: jdbc:postgresql://localhost:5433/fire_safety_db
     username: admin
@@ -33,9 +39,12 @@ spring:
   ai:
     ollama:
       base-url: http://localhost:11434
+      init:
+        timeout: 120s
       chat:
         options:
           model: llama3.1
+          timeout: 120s
       embedding:
         model: all-minilm
         options:

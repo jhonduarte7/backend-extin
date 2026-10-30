@@ -17,11 +17,17 @@ import java.util.List;
  * uploaded manuals, standards, and regulations.
  * Strictly filters by domain = 'DOCUMENT' to avoid collision with catalog product embeddings.
  * Conforms to docs/system-spec.md Section 4 (Tool 3: tool_rag_manuals_search).
+ *
+ * Optimizations:
+ * - Bounds retrieved chunks to a maximum of 4.
+ * - Caps per-chunk text payload to 700 characters to prevent Llama 3.1 context saturation.
  */
 @Component
 public class DocumentTools {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentTools.class);
+    public static final int MAX_DOCUMENT_CHUNKS = 4;
+    public static final int MAX_CHUNK_LENGTH = 700;
 
     private final VectorStore vectorStore;
 
@@ -34,7 +40,7 @@ public class DocumentTools {
      * restricted exclusively to domain == 'DOCUMENT'.
      *
      * @param query Natural language question about fire codes, installation, or manual instructions.
-     * @return Extracted and formatted document chunks.
+     * @return Extracted and formatted document chunks bounded for context efficiency.
      */
     @Tool(name = "searchInManuals",
           description = "Usa esta herramienta SIEMPRE para buscar respuestas sobre normativas, manuales, reglas de instalación o seguridad en los documentos PDF subidos al sistema")
@@ -51,8 +57,8 @@ public class DocumentTools {
         try {
             // Filtrado explícito por domain == 'DOCUMENT' para aislar los documentos del catálogo de productos
             SearchRequest searchRequest = SearchRequest.builder()
-                    .query(query)
-                    .topK(4)
+                    .query(query.trim())
+                    .topK(MAX_DOCUMENT_CHUNKS)
                     .filterExpression(new FilterExpressionBuilder().eq("domain", "DOCUMENT").build())
                     .build();
 
@@ -78,8 +84,13 @@ public class DocumentTools {
                     sourceInfo += ", Pág: " + pageNumber;
                 }
 
+                String text = (doc.getText() != null) ? doc.getText().trim() : "";
+                if (text.length() > MAX_CHUNK_LENGTH) {
+                    text = text.substring(0, MAX_CHUNK_LENGTH) + "... [fragmento acotado]";
+                }
+
                 sb.append(String.format("--- [Fragmento %d | Fuente: %s] ---\n", i + 1, sourceInfo));
-                sb.append(doc.getText()).append("\n\n");
+                sb.append(text).append("\n\n");
             }
 
             return sb.toString().trim();

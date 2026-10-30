@@ -68,8 +68,32 @@ public class InvoiceService {
             throw new IllegalArgumentException("exchange_rate must be greater than zero");
         }
 
-        // 2. Exact mathematical conversion from USD base amount
-        BigDecimal totalAmountUsd = quote.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
+        // 2. Resolve subtotal, IVA, and total amounts
+        BigDecimal subtotalUsd = (quote.getSubtotal() != null && quote.getSubtotal().compareTo(BigDecimal.ZERO) > 0)
+                ? quote.getSubtotal().setScale(2, RoundingMode.HALF_UP)
+                : (quote.getTotalAmount() != null && quote.getTotalAmount().compareTo(BigDecimal.ZERO) > 0
+                        ? quote.getTotalAmount().setScale(2, RoundingMode.HALF_UP)
+                        : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+
+        Boolean appliesIva = requestDto.appliesIva() != null
+                ? requestDto.appliesIva()
+                : (quote.getAppliesIva() != null ? quote.getAppliesIva() : Boolean.FALSE);
+
+        BigDecimal taxRate = requestDto.taxRate() != null
+                ? requestDto.taxRate().setScale(2, RoundingMode.HALF_UP)
+                : (quote.getTaxRate() != null ? quote.getTaxRate() : BigDecimal.ZERO);
+
+        BigDecimal taxAmountUsd;
+        BigDecimal totalAmountUsd;
+
+        if (Boolean.TRUE.equals(appliesIva) && taxRate != null && taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            taxAmountUsd = subtotalUsd.multiply(taxRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            totalAmountUsd = subtotalUsd.add(taxAmountUsd).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            taxAmountUsd = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            totalAmountUsd = subtotalUsd;
+        }
+
         BigDecimal totalAmountLocal = totalAmountUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
 
         // 3. Build immutable Invoice
@@ -81,6 +105,10 @@ public class InvoiceService {
         invoice.setBaseCurrency("USD");
         invoice.setTargetCurrency(requestDto.targetCurrency());
         invoice.setExchangeRate(exchangeRate);
+        invoice.setSubtotal(subtotalUsd);
+        invoice.setAppliesIva(appliesIva);
+        invoice.setTaxRate(taxRate);
+        invoice.setTaxAmount(taxAmountUsd);
         invoice.setTotalAmountUsd(totalAmountUsd);
         invoice.setTotalAmountLocal(totalAmountLocal);
         invoice.setRateDate(rateDate);
@@ -99,15 +127,15 @@ public class InvoiceService {
                 BigDecimal unitPriceUsd = qd.getUnitPrice() != null
                         ? qd.getUnitPrice().setScale(2, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO;
-                BigDecimal subtotalUsd = qd.getSubtotal() != null
+                BigDecimal lineSubtotalUsd = qd.getSubtotal() != null
                         ? qd.getSubtotal().setScale(2, RoundingMode.HALF_UP)
                         : unitPriceUsd.multiply(BigDecimal.valueOf(qd.getQuantity())).setScale(2, RoundingMode.HALF_UP);
 
                 BigDecimal convertedUnitPrice = unitPriceUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
-                BigDecimal convertedSubtotal = subtotalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
+                BigDecimal convertedSubtotal = lineSubtotalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
 
                 detail.setUnitPrice(unitPriceUsd);
-                detail.setSubtotal(subtotalUsd);
+                detail.setSubtotal(lineSubtotalUsd);
                 detail.setConvertedUnitPrice(convertedUnitPrice);
                 detail.setConvertedSubtotal(convertedSubtotal);
 
@@ -156,6 +184,10 @@ public class InvoiceService {
         invoice.setBaseCurrency(quote.getBaseCurrency());
         invoice.setTargetCurrency(quote.getTargetCurrency());
         invoice.setExchangeRate(quote.getExchangeRate());
+        invoice.setSubtotal(quote.getSubtotal() != null ? quote.getSubtotal() : quote.getTotalAmount());
+        invoice.setAppliesIva(quote.getAppliesIva() != null ? quote.getAppliesIva() : Boolean.FALSE);
+        invoice.setTaxRate(quote.getTaxRate() != null ? quote.getTaxRate() : BigDecimal.ZERO);
+        invoice.setTaxAmount(quote.getTaxAmount() != null ? quote.getTaxAmount() : BigDecimal.ZERO);
         invoice.setTotalAmountUsd(quote.getTotalAmount());
         invoice.setTotalAmountLocal(quote.getConvertedTotalAmount());
 

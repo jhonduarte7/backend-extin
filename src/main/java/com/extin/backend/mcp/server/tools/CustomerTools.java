@@ -16,11 +16,16 @@ import java.util.Optional;
 /**
  * Domain-specific tool for retrieving customer history and fiscal data.
  * Conforms to docs/system-spec.md Section 4 (Tool 2: tool_customer_history).
+ *
+ * Optimizations:
+ * - Bounds equipment list to a maximum of 8 items to protect LLM context window.
+ * - Appends summary count for additional equipment.
  */
 @Component
 public class CustomerTools {
 
     private static final Logger log = LoggerFactory.getLogger(CustomerTools.class);
+    public static final int MAX_EQUIPMENT_DISPLAY = 8;
 
     private final CustomerRepository customerRepository;
     private final CustomerEquipmentRepository customerEquipmentRepository;
@@ -68,13 +73,19 @@ public class CustomerTools {
         try {
             List<CustomerEquipment> equipmentList = customerEquipmentRepository.findByCustomerId(customer.getId());
             if (equipmentList != null && !equipmentList.isEmpty()) {
+                int displayLimit = Math.min(equipmentList.size(), MAX_EQUIPMENT_DISPLAY);
                 sb.append("\n=== Equipos y Extintores Registrados (").append(equipmentList.size()).append(") ===\n");
-                for (CustomerEquipment eq : equipmentList) {
+                for (int i = 0; i < displayLimit; i++) {
+                    CustomerEquipment eq = equipmentList.get(i);
                     sb.append("• ").append(eq.getEquipmentType())
                       .append(" | Serial: ").append(eq.getSerialNumber() != null ? eq.getSerialNumber() : "S/N")
                       .append(" | Ubicación: ").append(eq.getLocation() != null ? eq.getLocation() : "Principal")
                       .append(" | Vencimiento: ").append(eq.getExpirationDate() != null ? eq.getExpirationDate().toString() : "No registrada")
                       .append("\n");
+                }
+                if (equipmentList.size() > displayLimit) {
+                    sb.append("... y ").append(equipmentList.size() - displayLimit)
+                      .append(" equipo(s) adicional(es) registrado(s) para este cliente.\n");
                 }
             } else {
                 sb.append("\nNo tiene equipos registrados en el sistema actualmente.\n");

@@ -1,5 +1,6 @@
 package com.extin.backend.models.dtos;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -23,6 +24,20 @@ public record PayAndIssueInvoiceRequestDto(
 
         @NotBlank(message = "payment_reference is required")
         @JsonProperty("payment_reference")
-        String paymentReference
+        String paymentReference,
+
+        @JsonProperty("applies_iva")
+        @JsonAlias({"appliesIva", "applies_iva"})
+        Boolean appliesIva,
+
+        @JsonProperty("tax_rate")
+        @JsonAlias({"taxRate", "tax_rate"})
+        BigDecimal taxRate
 ) {
+    /**
+     * Backward-compatible convenience constructor.
+     */
+    public PayAndIssueInvoiceRequestDto(String targetCurrency, BigDecimal exchangeRate, String paymentReference) {
+        this(targetCurrency, exchangeRate, paymentReference, null, null);
+    }
 }

@@ -14,11 +14,17 @@ import java.util.List;
 /**
  * Domain-specific tool for catalog recommendations and semantic product search.
  * Conforms to docs/system-spec.md Section 4 (Tool 1: tool_semantic_catalog_search).
+ *
+ * Optimizations:
+ * - Bounds output results to a maximum of 4 items.
+ * - Caps per-item text payload to 350 characters to prevent Llama 3.1 context saturation.
  */
 @Component
 public class CatalogTools {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogTools.class);
+    public static final int MAX_CATALOG_RESULTS = 4;
+    public static final int MAX_ITEM_LENGTH = 350;
 
     private final VectorStore vectorStore;
 
@@ -30,7 +36,7 @@ public class CatalogTools {
      * Executes semantic similarity search against catalog embeddings in pgvector.
      *
      * @param query Natural language user inquiry.
-     * @return Formatted summary of matching catalog items.
+     * @return Formatted summary of matching catalog items bounded for context efficiency.
      */
     @Tool(name = "semanticProductSearch",
           description = "Usa esta herramienta SIEMPRE para buscar productos, extintores o recomendaciones en el catálogo usando el lenguaje natural del usuario")
@@ -45,8 +51,8 @@ public class CatalogTools {
 
         try {
             SearchRequest searchRequest = SearchRequest.builder()
-                    .query(query)
-                    .topK(4)
+                    .query(query.trim())
+                    .topK(MAX_CATALOG_RESULTS)
                     .build();
 
             List<Document> documents = vectorStore.similaritySearch(searchRequest);
@@ -58,7 +64,11 @@ public class CatalogTools {
             StringBuilder sb = new StringBuilder();
             sb.append("Resultados del catálogo:\n");
             for (Document doc : documents) {
-                sb.append("- ").append(doc.getText()).append("\n");
+                String text = (doc.getText() != null) ? doc.getText().trim() : "";
+                if (text.length() > MAX_ITEM_LENGTH) {
+                    text = text.substring(0, MAX_ITEM_LENGTH) + "...";
+                }
+                sb.append("- ").append(text).append("\n");
             }
 
             return sb.toString();

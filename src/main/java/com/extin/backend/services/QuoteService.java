@@ -68,7 +68,35 @@ public class QuoteService {
         quote.setTargetCurrency(targetCurrency);
         quote.setExchangeRate(exchangeRate);
 
-        BigDecimal totalUsd = BigDecimal.ZERO;
+        // Populate customer city and address
+        if (requestDto.customerCity() != null && !requestDto.customerCity().isBlank()) {
+            quote.setCustomerCity(requestDto.customerCity().trim());
+        }
+
+        if (requestDto.customerAddress() != null && !requestDto.customerAddress().isBlank()) {
+            String address = requestDto.customerAddress().trim();
+            quote.setCustomerAddress(address);
+            if (customer.getAddress() == null || customer.getAddress().isBlank()) {
+                customer.setAddress(address);
+            }
+        } else if (customer.getAddress() != null) {
+            quote.setCustomerAddress(customer.getAddress());
+        }
+
+        // Tax configuration (Con IVA vs. Sin IVA)
+        boolean appliesIva = Boolean.TRUE.equals(requestDto.appliesIva());
+        BigDecimal taxRate = BigDecimal.ZERO;
+        if (appliesIva) {
+            taxRate = (requestDto.taxRate() != null && requestDto.taxRate().compareTo(BigDecimal.ZERO) > 0)
+                    ? requestDto.taxRate().setScale(2, RoundingMode.HALF_UP)
+                    : new BigDecimal("16.00");
+        } else if (requestDto.taxRate() != null) {
+            taxRate = requestDto.taxRate().setScale(2, RoundingMode.HALF_UP);
+        }
+        quote.setAppliesIva(appliesIva);
+        quote.setTaxRate(taxRate);
+
+        BigDecimal subtotalUsd = BigDecimal.ZERO;
 
         // 4. Process line items
         for (QuoteItemRequestDto itemDto : requestDto.items()) {
@@ -76,28 +104,43 @@ public class QuoteService {
 
             int quantity = itemDto.quantity();
             BigDecimal unitPriceUsd = catalogItem.getBasePrice().setScale(2, RoundingMode.HALF_UP);
-            BigDecimal subtotalUsd = unitPriceUsd.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal lineSubtotalUsd = unitPriceUsd.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
 
             // Multi-currency converted amounts
             BigDecimal convertedUnitPrice = unitPriceUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal convertedSubtotal = subtotalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal convertedSubtotal = lineSubtotalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
 
             QuoteDetail detail = new QuoteDetail();
             detail.setQuote(quote);
             detail.setItem(catalogItem);
             detail.setQuantity(quantity);
             detail.setUnitPrice(unitPriceUsd);
-            detail.setSubtotal(subtotalUsd);
+            detail.setSubtotal(lineSubtotalUsd);
             detail.setConvertedUnitPrice(convertedUnitPrice);
             detail.setConvertedSubtotal(convertedSubtotal);
 
             quote.addDetail(detail);
-            totalUsd = totalUsd.add(subtotalUsd);
+            subtotalUsd = subtotalUsd.add(lineSubtotalUsd);
         }
 
-        // 5. Calculate final totals
-        BigDecimal totalLocal = totalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
+        // 5. Calculate final subtotal, tax amount, and total amounts
+        quote.setSubtotal(subtotalUsd);
+
+        BigDecimal taxAmountUsd;
+        BigDecimal totalUsd;
+
+        if (appliesIva && taxRate != null && taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            taxAmountUsd = subtotalUsd.multiply(taxRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            totalUsd = subtotalUsd.add(taxAmountUsd).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            taxAmountUsd = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            totalUsd = subtotalUsd.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        quote.setTaxAmount(taxAmountUsd);
         quote.setTotalAmount(totalUsd);
+
+        BigDecimal totalLocal = totalUsd.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
         quote.setConvertedTotalAmount(totalLocal);
 
         // 6. Persist quote
@@ -134,5 +177,16 @@ public class QuoteService {
     public QuoteResponseDto getQuoteDtoById(UUID quoteId) {
         Quote quote = getQuoteById(quoteId);
         return quoteMapper.toDto(quote);
+    }
+
+    /**
+     * Updates quote status (e.g. to APPROVED, PENDING, CANCELLED).
+     */
+    @Transactional
+    public QuoteResponseDto updateQuoteStatus(UUID quoteId, QuoteStatus status) {
+        Quote quote = getQuoteById(quoteId);
+        quote.setStatus(status);
+        Quote saved = quoteRepository.save(quote);
+        return quoteMapper.toDto(saved);
     }
 }

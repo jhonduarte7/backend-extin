@@ -27,6 +27,18 @@ public record InvoiceResponseDto(
         @JsonProperty("exchange_rate")
         BigDecimal exchangeRate,
 
+        @JsonProperty("subtotal")
+        BigDecimal subtotal,
+
+        @JsonProperty("applies_iva")
+        Boolean appliesIva,
+
+        @JsonProperty("tax_rate")
+        BigDecimal taxRate,
+
+        @JsonProperty("tax_amount")
+        BigDecimal taxAmount,
+
         @JsonProperty("total_amount_usd")
         BigDecimal totalAmountUsd,
 
@@ -62,7 +74,49 @@ public record InvoiceResponseDto(
         String message
 ) {
     /**
-     * Factory method for Paid Invoice (Enfoque B - Section 2.1).
+     * Factory method for Paid Invoice with tax breakdown.
+     */
+    public static InvoiceResponseDto forPaidInvoice(
+            String invoiceId,
+            String quoteId,
+            String status,
+            String targetCurrency,
+            BigDecimal exchangeRate,
+            BigDecimal totalAmountUsd,
+            BigDecimal totalAmountLocal,
+            LocalDateTime rateDate,
+            String paymentReference,
+            BigDecimal subtotal,
+            Boolean appliesIva,
+            BigDecimal taxRate,
+            BigDecimal taxAmount
+    ) {
+        return new InvoiceResponseDto(
+                invoiceId,
+                quoteId,
+                status,
+                targetCurrency,
+                exchangeRate,
+                subtotal,
+                appliesIva,
+                taxRate,
+                taxAmount,
+                totalAmountUsd,
+                totalAmountLocal,
+                rateDate,
+                paymentReference,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    /**
+     * Factory method for Paid Invoice (backward compatible).
      */
     public static InvoiceResponseDto forPaidInvoice(
             String invoiceId,
@@ -75,7 +129,7 @@ public record InvoiceResponseDto(
             LocalDateTime rateDate,
             String paymentReference
     ) {
-        return new InvoiceResponseDto(
+        return forPaidInvoice(
                 invoiceId,
                 quoteId,
                 status,
@@ -85,13 +139,10 @@ public record InvoiceResponseDto(
                 totalAmountLocal,
                 rateDate,
                 paymentReference,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
+                totalAmountUsd,
+                Boolean.FALSE,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
         );
     }
 }

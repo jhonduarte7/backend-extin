@@ -269,4 +269,47 @@ class InvoiceServiceTest {
         PayAndIssueInvoiceRequestDto negativeRate = new PayAndIssueInvoiceRequestDto("VES", new BigDecimal("-1.50"), "REF-123");
         assertThrows(IllegalArgumentException.class, () -> invoiceService.payAndIssueInvoice(quoteId, negativeRate));
     }
+
+    @Test
+    @DisplayName("payAndIssueInvoice - Supports appliesIva=true with taxRate=16.00 and calculates taxAmount and totalAmount")
+    void testPayAndIssueInvoice_WithIvaTaxCalculation() {
+        UUID quoteId = UUID.randomUUID();
+
+        Quote quote = new Quote();
+        quote.setId(quoteId);
+        quote.setCustomer(testCustomer);
+        quote.setStatus(QuoteStatus.APPROVED);
+        quote.setBaseCurrency("USD");
+        quote.setSubtotal(new BigDecimal("100.00"));
+        quote.setAppliesIva(true);
+        quote.setTaxRate(new BigDecimal("16.00"));
+        quote.setTaxAmount(new BigDecimal("16.00"));
+        quote.setTotalAmount(new BigDecimal("116.00"));
+
+        BigDecimal exchangeRate = new BigDecimal("40.00");
+        PayAndIssueInvoiceRequestDto request = new PayAndIssueInvoiceRequestDto(
+                "VES",
+                exchangeRate,
+                "REF-SENIAT-IVA"
+        );
+
+        when(quoteService.getQuoteById(quoteId)).thenReturn(quote);
+        when(invoiceRepository.findByQuoteId(quoteId)).thenReturn(Optional.empty());
+        when(invoiceRepository.findByOriginQuoteId(quoteId)).thenReturn(Optional.empty());
+        when(invoiceRepository.save(any(Invoice.class))).thenAnswer(invocation -> {
+            Invoice inv = invocation.getArgument(0);
+            inv.setId(UUID.randomUUID());
+            return inv;
+        });
+
+        InvoiceResponseDto response = invoiceService.payAndIssueInvoice(quoteId, request);
+
+        assertNotNull(response);
+        assertEquals(new BigDecimal("100.00"), response.subtotal());
+        assertEquals(Boolean.TRUE, response.appliesIva());
+        assertEquals(new BigDecimal("16.00"), response.taxRate());
+        assertEquals(new BigDecimal("16.00"), response.taxAmount());
+        assertEquals(new BigDecimal("116.00"), response.totalAmountUsd());
+        assertEquals(new BigDecimal("4640.00"), response.totalAmountLocal()); // 116 * 40 = 4640.00
+    }
 }

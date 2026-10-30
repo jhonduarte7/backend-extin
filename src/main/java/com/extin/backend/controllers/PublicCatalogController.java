@@ -29,13 +29,13 @@ public class PublicCatalogController {
 
     /**
      * Returns paginated list of products and services.
-     * Default page size is 10 records per page. Prices are in USD base currency.
+     * Default page size is 5 records per page. Prices are in USD base currency.
      */
     @GetMapping
     public ResponseEntity<Page<CatalogItemDto>> getCatalog(
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "type", required = false) ItemType type,
-            @PageableDefault(size = 10, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(size = 5, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
 
         Page<CatalogItemDto> catalogPage = catalogService.getCatalog(search, type, pageable);
         return ResponseEntity.ok(catalogPage);

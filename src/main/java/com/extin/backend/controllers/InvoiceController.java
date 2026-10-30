@@ -54,7 +54,7 @@ public class InvoiceController {
      */
     @GetMapping
     public ResponseEntity<Page<InvoiceResponseDto>> getAllInvoices(
-            @PageableDefault(size = 10, sort = "rateDate", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 5, sort = "rateDate", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(invoiceService.getAllInvoices(pageable));
     }
 

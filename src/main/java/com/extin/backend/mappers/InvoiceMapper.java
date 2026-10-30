@@ -33,6 +33,10 @@ public class InvoiceMapper {
                 invoice.getStatus() != null ? invoice.getStatus().name() : null,
                 invoice.getTargetCurrency(),
                 invoice.getExchangeRate(),
+                invoice.getSubtotal(),
+                invoice.getAppliesIva(),
+                invoice.getTaxRate(),
+                invoice.getTaxAmount(),
                 invoice.getTotalAmountUsd(),
                 invoice.getTotalAmountLocal(),
                 invoice.getRateDate(),
@@ -67,7 +71,11 @@ public class InvoiceMapper {
                 invoice.getTotalAmountUsd(),
                 invoice.getTotalAmountLocal(),
                 invoice.getRateDate(),
-                invoice.getPaymentReference()
+                invoice.getPaymentReference(),
+                invoice.getSubtotal(),
+                invoice.getAppliesIva(),
+                invoice.getTaxRate(),
+                invoice.getTaxAmount()
         );
     }
 }

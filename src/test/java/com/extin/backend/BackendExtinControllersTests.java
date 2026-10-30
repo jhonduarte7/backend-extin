@@ -99,24 +99,51 @@ class BackendExtinControllersTests {
     }
 
     @Test
-    @DisplayName("GET /api/public/catalog - Should return paginated items with default size 10")
+    @DisplayName("POST /api/public/quotes - Should create quote with customer_city and customer_address")
+    void testCreateQuoteWithCityAndAddress() throws Exception {
+        CustomerInfoDto customer = new CustomerInfoDto("J-77889900-1", "Comercializadora El Ávila C.A.", "avila@test.com");
+        List<QuoteItemRequestDto> items = List.of(
+                new QuoteItemRequestDto("EXT-PQS-10", 1, "PRODUCT")
+        );
+        QuoteRequestDto request = new QuoteRequestDto(
+                customer,
+                "Caracas",
+                "Av. Principal de Los Ruices, Edif. Avila, Piso 2",
+                "USD",
+                items
+        );
+
+        mockMvc.perform(post("/api/public/quotes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.quote_id", notNullValue()))
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andExpect(jsonPath("$.customer_city", is("Caracas")))
+                .andExpect(jsonPath("$.customer_address", is("Av. Principal de Los Ruices, Edif. Avila, Piso 2")))
+                .andExpect(jsonPath("$.total_amount_usd", is(38.50)))
+                .andExpect(jsonPath("$.message", is("Quote generated successfully.")));
+    }
+
+    @Test
+    @DisplayName("GET /api/public/catalog - Should return paginated items with default size 5")
     void testGetCatalogPagination() throws Exception {
         mockMvc.perform(get("/api/public/catalog"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", hasSize(10)))
-                .andExpect(jsonPath("$.size", is(10)))
+                .andExpect(jsonPath("$.content", hasSize(5)))
+                .andExpect(jsonPath("$.size", is(5)))
                 .andExpect(jsonPath("$.totalElements", greaterThanOrEqualTo(20)))
                 .andExpect(jsonPath("$.content[0].sku_code", notNullValue()))
                 .andExpect(jsonPath("$.content[0].base_price", notNullValue()));
     }
 
     @Test
-    @DisplayName("GET /api/admin/customers - Should return paginated customers with default size 10")
+    @DisplayName("GET /api/admin/customers - Should return paginated customers with default size 5")
     void testGetCustomersPagination() throws Exception {
         mockMvc.perform(get("/api/admin/customers").with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", hasSize(10)))
-                .andExpect(jsonPath("$.size", is(10)))
+                .andExpect(jsonPath("$.content", hasSize(5)))
+                .andExpect(jsonPath("$.size", is(5)))
                 .andExpect(jsonPath("$.totalElements", greaterThanOrEqualTo(50)));
     }
 

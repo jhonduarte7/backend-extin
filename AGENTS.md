@@ -1,189 +1,136 @@
-# AGENTS.md - Backend Extin Architecture & Guidelines
+# AGENTS.md — Engineering & Architectural Guide for AI Coding Agents
 
-## 1. Overview
-This project is the enterprise backend service for **EXTIN** (Fire Safety Management, Multi-Currency Invoicing, Document RAG, and AI Assistant), built with **Spring Boot 4.1.x** and **Java 25 (LTS)** following Specification-Driven Development (SDD) and clean layered architecture principles.
+> **Repository:** `backend-extin`  
+> **Framework:** Spring Boot 4.1.x + Spring AI 2.0.x + Spring Data JPA  
+> **Runtime:** Java 21 (LTS) & Java 25 compatible  
+> **Persistence:** PostgreSQL 16 + `pgvector`  
+> **LLM Engine:** Ollama (`llama3.1:latest`, `all-minilm:latest`)  
+> **Methodology:** Specification-Driven Development (SDD)
 
-## 2. Technology Stack & Standards
-- **Runtime**: Java 25 (Amazon Corretto / OpenJDK 25)
-- **Framework**: Spring Boot 4.1.x
-- **Build Tool**: Apache Maven (via `./mvnw` / `mvnw.cmd` wrapper)
-- **Persistence**: Spring Data JPA + Hibernate 6.x / 7.x
-- **Database**: PostgreSQL 16 with `pgvector` extension support
-- **Artificial Intelligence & RAG**: Spring AI 2.0.x
-  - **LLM Engine**: Ollama (model: `llama3.1`)
-  - **Embeddings**: Ollama (model: `all-minilm`, 384 dimensions)
-  - **Vector Store**: `PgVectorStore` (HNSW indexing, Cosine Distance)
-  - **Document Reader**: Apache PDFBox (`PagePdfDocumentReader`, `TokenTextSplitter`)
-  - **Model Context Protocol (MCP)**: Tool integration (`CatalogTools`, `CustomerTools`, `DocumentTools`) and `ChatMemory`
-- **Security**: Spring Security 6.x + JJWT (io.jsonwebtoken 0.12.6)
-  - **Stateless Authentication**: JWT delivered securely via `HttpOnly`, `SameSite`, `Path=/` cookies
-  - **Role-Based Access Control**: `ADMIN` and `USER` roles
-- **Language Convention**:
-  - Source code, entity mappings, identifiers, commits, and comments: **English**
-  - Developer explanations, progress updates, and user communication: **Spanish**
+---
 
-## 3. Package Structure
-```
-com.extin.backend
-├── BackendExtinApplication.java           # Spring Boot bootstrap & async activation
-├── config/                                # Configuration beans
-│   ├── AuditorAwareImpl.java              # JPA AuditorAware resolving authenticated principal
-│   ├── DatabaseSeeder.java                # Mock data seeder (50 customers, 20 items, equipment, quotes, invoices)
-│   ├── DataInitializer.java               # Baseline catalog vectorization and admin account init
-│   └── JpaConfig.java                     # JPA Auditing and repository scanning configuration
-├── controllers/                           # REST API Controllers (Public, Admin, Auth, Chat)
-│   ├── AdminChatController.java           # Admin AI Chat assistant endpoint (/api/admin/chat)
-│   ├── AdminCustomerController.java       # Customer management & search (/api/admin/customers)
-│   ├── AdminQuoteController.java          # Admin quote management (/api/admin/quotes)
-│   ├── AuthController.java                # Authentication, cookie-based login & logout (/api/auth)
-│   ├── DocumentController.java            # PDF Manuals & Regulations upload & RAG vectorization (/api/admin/documents)
-│   ├── InvoiceController.java             # Invoicing, pay-and-issue, fiscal issuance (/api/admin/invoices)
-│   ├── McpChatController.java             # MCP AI Assistant endpoint with tools & memory (/api/admin/chat/mcp)
-│   ├── PublicCatalogController.java       # Public fire safety catalog (/api/public/catalog)
-│   └── PublicQuoteController.java         # Public quote creation & retrieval (/api/public/quotes)
-├── events/                                # Internal Spring Application Events
-│   └── EntityVectorizationEvent.java      # Async event triggered on entity persistence/update
-├── exceptions/                            # Error handling & custom exceptions
-│   ├── GlobalExceptionHandler.java        # Centralized REST exception handler (RFC 7807 compliant)
-│   └── ResourceNotFoundException.java     # HTTP 404 entity not found exception
-├── mappers/                               # Explicit Entity <-> DTO mappers
-│   ├── CatalogItemMapper.java
-│   ├── CustomerMapper.java
-│   ├── InvoiceMapper.java
-│   └── QuoteMapper.java
-├── mcp/                                   # Model Context Protocol (MCP) & Spring AI Tools
-│   ├── client/
-│   │   └── config/
-│   │       └── McpClientConfig.java       # ChatMemory buffer bean configuration
-│   └── server/
-│       └── tools/
-│           ├── CatalogTools.java          # Tool: semanticProductSearch
-│           ├── CustomerTools.java         # Tool: getCustomerHistory
-│           └── DocumentTools.java         # Tool: searchInManuals (domain='DOCUMENT')
-├── models/                                # Domain Entities, DTO records, and Enums
-│   ├── dtos/                              # Immutable DTO records matching API contracts exactly
-│   │   ├── CatalogItemDto.java
-│   │   ├── ChatRequestDto.java
-│   │   ├── ChatResponseDto.java
-│   │   ├── CustomerInfoDto.java
-│   │   ├── CustomerResponseDto.java
-│   │   ├── DocumentUploadResponseDto.java
-│   │   ├── ErrorResponseDto.java
-│   │   ├── InvoiceResponseDto.java
-│   │   ├── LoginRequestDto.java
-│   │   ├── LoginResponseDto.java
-│   │   ├── PayAndIssueInvoiceRequestDto.java
-│   │   ├── QuoteItemRequestDto.java
-│   │   ├── QuoteRequestDto.java
-│   │   └── QuoteResponseDto.java
-│   ├── entities/                          # JPA Entities with Auditing
-│   │   ├── Auditory.java                  # MappedSuperclass with @CreatedDate, @LastModifiedBy, etc.
-│   │   ├── CatalogItem.java               # Fire safety equipment and maintenance services
-│   │   ├── CatalogItemEntityListener.java # PostPersist/PostUpdate listener triggering vectorization
-│   │   ├── Customer.java                  # Fiscal customer records (RIF / CNPJ)
-│   │   ├── CustomerEquipment.java         # Physical customer equipment tracking & expiration
-│   │   ├── Invoice.java                   # Immutable fiscal invoices
-│   │   ├── InvoiceDetail.java             # Invoice line items with multi-currency snapshots
-│   │   ├── Quote.java                     # Commercial quotes
-│   │   ├── QuoteDetail.java               # Quote line items
-│   │   └── User.java                      # Spring Security UserDetails entity
-│   └── enums/                             # Domain Enums
-│       ├── InvoiceStatus.java             # ISSUED, PAID, CANCELLED
-│       ├── ItemType.java                  # PRODUCT, SERVICE
-│       ├── QuoteStatus.java               # PENDING, APPROVED, REJECTED, INVOICED
-│       └── Role.java                      # ADMIN, USER
-├── repositories/                          # Spring Data JPA Repository Interfaces
-│   ├── CatalogItemRepository.java
-│   ├── CustomerEquipmentRepository.java
-│   ├── CustomerRepository.java
-│   ├── InvoiceDetailRepository.java
-│   ├── InvoiceRepository.java
-│   ├── QuoteDetailRepository.java
-│   ├── QuoteRepository.java
-│   └── UserRepository.java
-├── security/                              # Spring Security & JWT components
-│   ├── JwtAuthenticationFilter.java       # OncePerRequestFilter reading HttpOnly jwt_token cookie
-│   ├── JwtService.java                    # HMAC-SHA256 JWT builder, parser, and validator
-│   ├── SecurityBeansConfig.java           # BCryptPasswordEncoder & AuthenticationManager beans
-│   ├── SecurityConfig.java                # Stateless SecurityFilterChain, CORS, and endpoint rules
-│   └── UserDetailsServiceImpl.java        # UserDetailsService bridge with UserRepository
-└── services/                              # Domain Services & Business Logic Orchestration
-    ├── CatalogService.java                # Catalog query & pagination
-    ├── ChatService.java                   # AI Assistant orchestration, system prompt & ChatClient
-    ├── CurrencyExchangeService.java       # Multi-currency exchange rate engine (USD, VES, BRL)
-    ├── CustomerService.java               # Customer search & registration
-    ├── DocumentRagService.java            # PDF ingestion, chunking, and pgvector storage
-    ├── InvoiceService.java                # Invoicing, settlement, and fiscal control numbers
-    ├── QuoteService.java                  # Multi-currency cart calculation & quote persistence
-    └── VectorizationService.java          # Real-time async vectorization into pgvector
-```
+## 1. Mission & Scope
 
-## 4. API Contracts & Endpoints
+This document sets the mandatory engineering standards, architectural conventions, and development guidelines for any AI coding agent modifying, extending, or maintaining the `backend-extin` codebase.
 
-### 4.1 Authentication (`/api/auth`)
-*   `POST /api/auth/login`: Authenticates username and password; attaches secure `HttpOnly` cookie `jwt_token`.
-*   `POST /api/auth/logout`: Clears the authentication cookie (`Max-Age=0`).
-*   `GET /api/auth/me`: Returns identity and role of currently authenticated user.
+Every change must strictly align with the specifications documented in `docs/system-spec.md` and `docs/api-contracts.md`. **Do not invent arbitrary patterns or unneeded dependencies.**
 
-### 4.2 Public Endpoints (`/api/public`)
-*   `GET /api/public/catalog`: Returns paginated list of active products and services with base USD pricing (default 10 items/page).
-*   `POST /api/public/quotes`: Accepts cart items, computes line subtotals in USD, applies exchange rate (`VES` = 36.50, `BRL` = 5.50, `USD` = 1.00), persists quote and details, returns JSON response.
-*   `GET /api/public/quotes/{id}`: Returns details of a specific quote.
+---
 
-### 4.3 Admin Commercial & Fiscal Endpoints (`/api/admin`)
-*   `GET /api/admin/quotes`: Returns paginated quotes with optional `status` filter (e.g. `APPROVED`, `PENDING`, `INVOICED`).
-*   `POST /api/admin/invoices/pay-and-issue/{quote_id}`: Issues immutable paid invoice upon payment notification, computing exact local amount (`total_amount_usd * exchange_rate`), recording `PAID` status, `rate_date`, and `payment_reference`.
-*   `POST /api/admin/invoices/from-quote/{quote_id}`: Converts approved quote into immutable fiscal invoice with unique SENIAT control number.
-*   `GET /api/admin/invoices`: Returns paginated list of all invoices.
-*   `GET /api/admin/invoices/{id}`: Returns single invoice details.
-*   `GET /api/admin/customers`: Returns paginated list of customers (default 10 items/page) with search query.
+## 2. Core Architectural Principles
 
-### 4.4 Artificial Intelligence & Document RAG Endpoints
-*   `POST /api/admin/documents/upload`: Multipart upload of PDF manuals or safety standards. Purges previous vectors for the category, chunks content via `TokenTextSplitter`, and embeds into `pgvector` under `domain = 'DOCUMENT'`.
-*   `POST /api/admin/chat`: AI Assistant endpoint processing prompts and executing domain tools.
-*   `POST /api/admin/chat/mcp`: Advanced conversational MCP AI Assistant endpoint supporting conversation sessions (`X-Chat-Id`), ChatMemory buffer, and execution of tools:
-    - `semanticProductSearch`: Semantic search across catalog equipment and services.
-    - `getCustomerHistory`: Exact historical equipment and fiscal data lookup by RIF/CNPJ.
-    - `searchInManuals`: Semantic retrieval across uploaded safety manuals and fire codes (NFPA/COVENIN).
+### 2.1 Layered Clean Architecture & Separation of Concerns
+1. **Controllers (`com.extin.backend.controllers`):**
+   - Strictly responsible for HTTP parameter extraction, `@Valid` payload validation, content negotiation, and routing.
+   - Never inject `EntityManager`, `JdbcTemplate`, or execute business logic directly in controllers.
+   - Delegate all orchestration to the corresponding domain service.
+2. **Services (`com.extin.backend.services`):**
+   - Encapsulate business logic, transactional boundaries (`@Transactional`), multi-currency computations, and AI prompt orchestration.
+   - Return clean domain objects or DTOs.
+3. **Mappers (`com.extin.backend.mappers`):**
+   - Perform explicit conversions between JPA entities and immutable DTO records (`CatalogItemMapper`, `CustomerMapper`, `InvoiceMapper`, `QuoteMapper`).
+   - Avoid reflection-based mapping libraries (e.g., ModelMapper) to maintain high performance and explicit typing.
+4. **Data Transfer Objects (`com.extin.backend.models.dtos`):**
+   - MUST be implemented as Java `record`s to ensure immutability and concise JSON serialization.
+   - Match field names in `docs/api-contracts.md` exactly.
+5. **JPA Entities (`com.extin.backend.models.entities`):**
+   - All persistent entities MUST inherit from `Auditory` (`@MappedSuperclass`) to automatically record `created_by`, `last_modified_by`, `created_at`, and `updated_at`.
+   - Never expose entities directly in controller return signatures; always convert to DTOs.
 
-## 5. Architectural Subsystems
+---
 
-### 5.1 Multi-Currency Engine
-*   **Base Currency**: `USD` (Internal standard of record).
-*   **Target Currencies**: `VES` (Venezuelan Bolívares - BCV official benchmark) and `BRL` (Brazilian Reais).
-*   **Formulas**:
-    - `total_amount_usd` = $\sum (\text{item.basePrice} \times \text{quantity})$
-    - `total_amount_local` = $\text{total\_amount\_usd} \times \text{exchange\_rate}$
-*   Line item details lock unit prices and converted values at quote and invoice creation time to ensure immutability.
+## 3. Artificial Intelligence & Spring AI Standards
 
-### 5.2 Real-Time Asynchronous Auto-Vectorization
-1. When a `CatalogItem` is created or modified, `CatalogItemEntityListener` intercepts the `@PostPersist` or `@PostUpdate` event.
-2. An `EntityVectorizationEvent` is published into Spring's `ApplicationEventPublisher`.
-3. `VectorizationService` receives the event asynchronously via `@Async` and `@EventListener`, generates vector embeddings via Ollama, and persists them into `pgvector` without blocking the database transaction.
+### 3.1 Reactive Streaming Chat (SSE)
+- The primary AI endpoint is `POST /api/admin/chat/mcp` returning `Flux<String>` with `produces = {MediaType.TEXT_EVENT_STREAM_VALUE, MediaType.TEXT_PLAIN_VALUE}`.
+- Invokes `chatClient.prompt().system(SYSTEM_PROMPT).user(userMessage).advisors(...).toolCallbacks(uniqueToolCallbacks).stream().content()`.
+- Backward compatibility: Retain content negotiation for `application/json` returning `ChatResponseDto` for legacy clients and integration tests.
 
-### 5.3 Document RAG (Retrieval-Augmented Generation)
-*   PDF files uploaded to `/api/admin/documents/upload` are processed by Apache PDFBox `PagePdfDocumentReader`.
-*   Extracted text is partitioned into overlapping semantic chunks via `TokenTextSplitter`.
-*   Chunks are tagged with metadata: `domain = 'DOCUMENT'`, `category`, and `file_name`.
-*   When queried via `searchInManuals`, similarity searches strictly filter by `domain == 'DOCUMENT'`, preventing collision with catalog item embeddings.
+### 3.2 Tool Calling & Deduplication
+- Tools are declared in `com.extin.backend.mcp.server.tools`:
+  - `CatalogTools.java`: `semanticProductSearch(query)`
+  - `CustomerTools.java`: `getCustomerHistory(taxId)`
+  - `DocumentTools.java`: `searchInManuals(query)`
+- **Mandatory Rule:** Tools MUST be resolved and deduplicated through `ChatService.resolveUniqueToolCallbacks(Object... toolBeans)`. Never register duplicate tool names or call `.defaultTools()` on the global `ChatClient.Builder`.
+- Keep tool responses bounded (e.g. max 4 items, max 350-700 characters per chunk) to protect the context window of local LLMs like Llama 3.1.
 
-### 5.4 Security Architecture
-*   Authentication is 100% stateless.
-*   Upon login, a signed JWT (HMAC-SHA256) is returned inside a secured `HttpOnly` cookie named `jwt_token`.
-*   `JwtAuthenticationFilter` validates the cookie on each incoming request and establishes the Spring Security context.
-*   Endpoints are protected with route-based authorization:
-    - Public: `/api/auth/**`, `/api/public/**`
-    - User/Admin: `/api/admin/chat/**`
-    - Admin-only: `/api/admin/**`
+### 3.3 HTTP Timeouts & Resilience
+- Timeouts between Spring Boot and local Ollama are configured to `120s` (connect) and `180s` (read) in `application.yml` and customizer beans (`RestClientCustomizer`, `WebClientCustomizer` in `McpClientConfig`).
+- All streaming and synchronous chat methods MUST catch exceptions and wrap them via `buildContingencyResponse(Throwable e)`:
+  - If a timeout or connection drop occurs, return a structured Markdown explanation ("Modo Contingencia").
+  - NEVER throw unhandled 500 exceptions to the frontend for LLM inference timeouts.
 
-### 5.5 JPA Auditing
-All persistent entities inherit from `Auditory`, providing automated tracking for:
-- `created_by` (email or username of the creator via `AuditorAwareImpl`)
-- `last_modified_by` (email or username of the updater)
-- `created_at` (immutable timestamp)
-- `updated_at` (modification timestamp)
+### 3.4 Document RAG & Vector Isolation
+- Chunks vectorized from uploaded PDF files MUST include metadata: `{"domain": "DOCUMENT", "category": category}`.
+- Re-uploading a document category must first purge previous vector chunks:
+  `DELETE FROM vector_store WHERE metadata->>'domain' = 'DOCUMENT' AND metadata->>'category' = ?`.
+- Vector similarity searches in `DocumentTools` must strictly filter by `domain == 'DOCUMENT'` to prevent pollution from catalog items.
 
-## 6. Build, Testing & Execution
-*   **Start Database**: `docker compose up -d`
-*   **Run Test Suite (72 tests)**: `./mvnw test`
-*   **Run Spring Boot Application**: `./mvnw spring-boot:run`
+---
+
+## 4. Business Domain Rules
+
+### 4.1 Multi-Currency Engine
+- **Base Currency:** `USD`.
+- **Target Currencies:** `VES` (Venezuelan Bolívares via official BCV benchmark) and `BRL` (Brazilian Reais).
+- Form calculations:
+  - `total_amount_local = total_amount_usd * exchange_rate`.
+  - Line items must capture both USD unit prices and converted unit prices at the time of creation to ensure historical immutability.
+
+### 4.2 Dual Tax Modality
+- Support both `appliesIva = true` (16% SENIAT tax calculation) and `appliesIva = false` (Contado / simple delivery note).
+- Maintain tax fields across `Quote`, `QuoteDetail`, `Invoice`, and `InvoiceDetail`: `subtotal`, `taxRate`, `taxAmount`, and `total`.
+
+### 4.3 Unified Global Pagination
+- All administrative list endpoints must support Spring Data `Pageable` with a strict default page size of 5 records:
+  `@PageableDefault(size = 5) Pageable pageable`.
+- Standardize response wrappers using Spring Data `Page<T>` or mapped `Page<DTO>`.
+
+---
+
+## 5. Security & Stateless Authentication
+
+- **Stateless Sessions:** `SessionCreationPolicy.STATELESS` in `SecurityConfig`.
+- **Cookie Authentication:** JWT tokens are transported exclusively via secure `HttpOnly` cookies named `jwt_token`.
+- **Filter Order:** `JwtAuthenticationFilter` runs before `UsernamePasswordAuthenticationFilter`.
+- **Role Isolation:**
+  - Public: `/api/auth/login`, `/api/auth/logout`, `/api/public/**`.
+  - Authenticated (`ADMIN` or `USER`): `/api/auth/me`, `/api/admin/chat/**`.
+  - Restricted (`ADMIN` only): `/api/admin/**`.
+
+---
+
+## 6. Testing, Build & CI/CD Standards
+
+### 6.1 Testing Mandate
+- Run the full test suite before any push:
+  ```bash
+  ./mvnw test
+  ```
+- All 90 unit and integration tests MUST pass with 0 failures and 0 errors (`BUILD SUCCESS`).
+- Include tests for any new controller endpoint, service method, or tool calling behavior.
+
+### 6.2 Build & Packaging
+- The project is compiled targeting Java 21 bytecode compatibility:
+  ```bash
+  ./mvnw clean package -DskipTests
+  ```
+- Keep `mvnw` executable in git: `git update-index --chmod=+x mvnw`.
+
+### 6.3 GitHub Actions Workflow
+- Defined in `.github/workflows/backend-ci.yml`.
+- Runs automatically on `push` and `pull_request` to `main`.
+- Uses Ubuntu runner, Temurin JDK 21, and Maven caching.
+
+---
+
+## 7. Commit Message Standards
+
+All Git commit messages MUST follow the [Conventional Commits](https://www.conventionalcommits.org/) specification in English:
+
+- `feat(scope): add new feature or endpoint`
+- `fix(scope): resolve bug, timeout or calculation error`
+- `refactor(scope): internal code cleanup or architecture alignment`
+- `docs(scope): update documentation or specifications`
+- `test(scope): add or modify test coverage`
+- `ci(scope): update GitHub Actions workflow or build scripts`

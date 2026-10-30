@@ -323,6 +323,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         quote1.setTargetCurrency("VES");
         quote1.setExchangeRate(new BigDecimal("36.5000"));
         quote1.setIssueDate(LocalDateTime.now().minusDays(2));
+        quote1.setCustomerCity("Caracas");
+        quote1.setCustomerAddress("Av. Francisco de Miranda, Torre Delta, Piso 4, Caracas");
+        quote1.setDocumentNumber("003875");
         quote1.setNotes("Cotización aprobada para dotación de extintores en Torre Delta");
 
         QuoteDetail q1d1 = new QuoteDetail(quote1, pqs10, 2, new BigDecimal("38.50")); // 77.00 USD
@@ -342,6 +345,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         quote2.setTargetCurrency("BRL");
         quote2.setExchangeRate(new BigDecimal("5.5000"));
         quote2.setIssueDate(LocalDateTime.now().minusDays(1));
+        quote2.setCustomerCity("São Paulo");
+        quote2.setCustomerAddress("Av. Paulista 1000, Bela Vista, São Paulo");
+        quote2.setDocumentNumber("003876");
         quote2.setNotes("Cotação aprovada para compra de extintores PQS 5 Lbs");
 
         QuoteDetail q2d1 = new QuoteDetail(quote2, pqs5 != null ? pqs5 : pqs10, 4, new BigDecimal("25.00")); // 100.00 USD
@@ -357,6 +363,8 @@ public class DatabaseSeeder implements CommandLineRunner {
         quote3.setTargetCurrency("USD");
         quote3.setExchangeRate(BigDecimal.ONE);
         quote3.setIssueDate(LocalDateTime.now().minusHours(8));
+        quote3.setCustomerCity("Maracay");
+        quote3.setCustomerAddress("Zona Industrial San Vicente, Maracay, Aragua");
         quote3.setNotes("Cotización pendiente por revisión técnica");
 
         QuoteDetail q3d1 = new QuoteDetail(quote3, co210 != null ? co210 : pqs10, 2, new BigDecimal("95.00")); // 190.00 USD
@@ -382,6 +390,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         quoteInv1.setTargetCurrency("VES");
         quoteInv1.setExchangeRate(new BigDecimal("45.5000"));
         quoteInv1.setIssueDate(LocalDateTime.now().minusDays(5));
+        quoteInv1.setCustomerCity("Mérida");
+        quoteInv1.setCustomerAddress("Av. Las Américas, Edif. Los Pinos, Mérida");
+        quoteInv1.setDocumentNumber("003877");
         QuoteDetail qi1d1 = new QuoteDetail(quoteInv1, recPqs10 != null ? recPqs10 : pqs10, 3, new BigDecimal("12.00")); // 36.00 USD
         QuoteDetail qi1d2 = new QuoteDetail(quoteInv1, recCo25 != null ? recCo25 : pqs10, 2, new BigDecimal("15.00"));  // 30.00 USD
         quoteInv1.addDetail(qi1d1);
@@ -398,6 +409,10 @@ public class DatabaseSeeder implements CommandLineRunner {
         invoice1.setExchangeRate(new BigDecimal("45.5000"));
         BigDecimal totalUsd1 = savedQuoteInv1.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
         BigDecimal totalLocal1 = totalUsd1.multiply(new BigDecimal("45.5000")).setScale(2, RoundingMode.HALF_UP); // 66.00 * 45.50 = 3003.00 VES
+        invoice1.setSubtotal(savedQuoteInv1.getSubtotal());
+        invoice1.setAppliesIva(savedQuoteInv1.getAppliesIva());
+        invoice1.setTaxRate(savedQuoteInv1.getTaxRate());
+        invoice1.setTaxAmount(savedQuoteInv1.getTaxAmount());
         invoice1.setTotalAmountUsd(totalUsd1);
         invoice1.setTotalAmountLocal(totalLocal1);
         LocalDateTime rateDate1 = LocalDateTime.now().minusDays(3);
@@ -436,6 +451,10 @@ public class DatabaseSeeder implements CommandLineRunner {
         invoice2.setExchangeRate(new BigDecimal("5.6000"));
         BigDecimal totalUsd2 = savedQuoteInv2.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
         BigDecimal totalLocal2 = totalUsd2.multiply(new BigDecimal("5.6000")).setScale(2, RoundingMode.HALF_UP); // 194.00 * 5.60 = 1086.40 BRL
+        invoice2.setSubtotal(savedQuoteInv2.getSubtotal());
+        invoice2.setAppliesIva(savedQuoteInv2.getAppliesIva());
+        invoice2.setTaxRate(savedQuoteInv2.getTaxRate());
+        invoice2.setTaxAmount(savedQuoteInv2.getTaxAmount());
         invoice2.setTotalAmountUsd(totalUsd2);
         invoice2.setTotalAmountLocal(totalLocal2);
         LocalDateTime rateDate2 = LocalDateTime.now().minusDays(1);
@@ -471,6 +490,10 @@ public class DatabaseSeeder implements CommandLineRunner {
         invoice3.setTargetCurrency("USD");
         invoice3.setExchangeRate(BigDecimal.ONE);
         BigDecimal totalUsd3 = savedQuoteInv3.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
+        invoice3.setSubtotal(savedQuoteInv3.getSubtotal());
+        invoice3.setAppliesIva(savedQuoteInv3.getAppliesIva());
+        invoice3.setTaxRate(savedQuoteInv3.getTaxRate());
+        invoice3.setTaxAmount(savedQuoteInv3.getTaxAmount());
         invoice3.setTotalAmountUsd(totalUsd3);
         invoice3.setTotalAmountLocal(totalUsd3);
         LocalDateTime rateDate3 = LocalDateTime.now().minusHours(5);

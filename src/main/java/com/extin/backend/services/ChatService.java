@@ -15,13 +15,21 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Service orchestrating the MCP (Model Context Protocol) AI assistant queries and business logic.
@@ -60,6 +68,7 @@ public class ChatService {
     private final DocumentTools documentTools;
     private final CustomerEquipmentRepository customerEquipmentRepository;
     private final CustomerRepository customerRepository;
+    private final List<ToolCallback> uniqueToolCallbacks;
 
     /**
      * Primary constructor injecting ChatClient.Builder, tools, repositories, and ChatMemory.
@@ -86,10 +95,14 @@ public class ChatService {
                         .maxMessages(20)
                         .build();
 
-        // Configuración de ChatClient con SYSTEM_PROMPT, tools y MessageChatMemoryAdvisor
+        // Limpia y deduplica la lista de callbacks para que cada herramienta aparezca estrictamente una sola vez
+        this.uniqueToolCallbacks = resolveUniqueToolCallbacks(catalogTools, customerTools, documentTools);
+
+        // Configuración de ChatClient con SYSTEM_PROMPT y MessageChatMemoryAdvisor.
+        // NOTA: No se inyectan defaultTools aquí para evitar duplicidad con ToolCallingChatOptions
+        // en la invocación por prompt.
         this.chatClient = chatClientBuilder
                 .defaultSystem(SYSTEM_PROMPT)
-                .defaultTools(catalogTools, customerTools, documentTools)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(this.chatMemory).build())
                 .build();
     }
@@ -110,6 +123,57 @@ public class ChatService {
                 .chatMemoryRepository(new InMemoryChatMemoryRepository())
                 .maxMessages(20)
                 .build();
+        this.uniqueToolCallbacks = Collections.emptyList();
+    }
+
+    /**
+     * Resolves ToolCallbacks from provided tool beans and deduplicates them strictly by tool name,
+     * ensuring that each tool (semanticProductSearch, getCustomerHistory, searchInManuals)
+     * appears strictly once in ToolCallingChatOptions before invoking the AI model.
+     *
+     * @param toolBeans Array of Spring components containing @Tool methods.
+     * @return Immutable list of unique ToolCallback instances verified with validateToolCallbacks.
+     */
+    public static List<ToolCallback> resolveUniqueToolCallbacks(Object... toolBeans) {
+        if (toolBeans == null || toolBeans.length == 0) {
+            return Collections.emptyList();
+        }
+
+        List<Object> nonNullTools = Arrays.stream(toolBeans)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (nonNullTools.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, ToolCallback> uniqueMap = new LinkedHashMap<>();
+        for (Object tool : nonNullTools) {
+            ToolCallback[] callbacks = ToolCallbacks.from(tool);
+            for (ToolCallback callback : callbacks) {
+                if (callback != null && callback.getToolDefinition() != null) {
+                    String toolName = callback.getToolDefinition().name();
+                    if (uniqueMap.putIfAbsent(toolName, callback) != null) {
+                        log.warn("ChatService: Duplicate tool '{}' detected from source '{}' and omitted from ToolCallingChatOptions.",
+                                toolName, tool.getClass().getSimpleName());
+                    } else {
+                        log.debug("ChatService: Registered unique tool callback: '{}'", toolName);
+                    }
+                }
+            }
+        }
+
+        List<ToolCallback> cleanedList = List.copyOf(uniqueMap.values());
+        // Validación estricta con Spring AI para asegurar que no existan nombres duplicados
+        ToolCallingChatOptions.validateToolCallbacks(cleanedList);
+        return cleanedList;
+    }
+
+    /**
+     * Returns the deduplicated list of ToolCallback instances configured for the assistant.
+     */
+    public List<ToolCallback> getUniqueToolCallbacks() {
+        return this.uniqueToolCallbacks;
     }
 
     /**
@@ -134,8 +198,9 @@ public class ChatService {
                     .user(userMessage)
                     .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, effectiveChatId));
 
-            if (catalogTools != null && customerTools != null && documentTools != null) {
-                promptSpec.tools(catalogTools, customerTools, documentTools);
+            // Inyecta la lista limpia y desduplicada de callbacks estrictamente una vez
+            if (uniqueToolCallbacks != null && !uniqueToolCallbacks.isEmpty()) {
+                promptSpec.toolCallbacks(uniqueToolCallbacks);
             }
 
             String markdownReply = promptSpec.call().content();
@@ -147,9 +212,96 @@ public class ChatService {
             return markdownReply;
         } catch (Exception e) {
             log.error("ChatService: Error executing ChatClient call for chatId='{}': {}", effectiveChatId, e.getMessage(), e);
-            return "⚠️ **Error en el Asistente IA:** " + e.getMessage() +
-                    "\n\n*Asegúrate de que Ollama esté ejecutándose con el modelo configurado (ej. llama3.1).*";
+            return buildContingencyResponse(e);
         }
+    }
+
+    /**
+     * Executes reactive streaming chat isolating conversations by chatId, injecting
+     * the SYSTEM_PROMPT by default, passing the user message, and enabling domain tools.
+     * Streams tokens in real time via Flux to prevent client timeouts on local LLM inference.
+     *
+     * @param chatId Unique identifier for the user session or conversation.
+     * @param userMessage The natural language question or request.
+     * @return Flux of streaming tokens from the LLM.
+     */
+    public Flux<String> streamChat(String chatId, String userMessage) {
+        String effectiveChatId = (chatId != null && !chatId.isBlank()) ? chatId : "default-chat-session";
+        log.info("ChatService: Streaming chat for chatId='{}', message='{}'", effectiveChatId, userMessage);
+
+        if (userMessage == null || userMessage.isBlank()) {
+            return Flux.just("Por favor ingresa una consulta válida.");
+        }
+
+        try {
+            var promptSpec = chatClient.prompt()
+                    .system(SYSTEM_PROMPT)
+                    .user(userMessage)
+                    .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, effectiveChatId));
+
+            // Inyecta la lista limpia y desduplicada de callbacks estrictamente una vez
+            if (uniqueToolCallbacks != null && !uniqueToolCallbacks.isEmpty()) {
+                promptSpec.toolCallbacks(uniqueToolCallbacks);
+            }
+
+            return promptSpec.stream().content()
+                    .filter(Objects::nonNull)
+                    .onErrorResume(e -> {
+                        log.error("ChatService: Error during chat stream for chatId='{}': {}", effectiveChatId, e.getMessage(), e);
+                        return Flux.just(buildContingencyResponse(e));
+                    });
+        } catch (Exception e) {
+            log.error("ChatService: Error initializing chat stream for chatId='{}': {}", effectiveChatId, e.getMessage(), e);
+            return Flux.just(buildContingencyResponse(e));
+        }
+    }
+
+    /**
+     * Constructs a friendly, structured Markdown contingency message when local AI inference
+     * encounters a timeout, network failure, or service unavailability, preventing HTTP 500 errors.
+     *
+     * @param e Caught exception or throwable from ChatClient execution.
+     * @return User-friendly contingency Markdown message.
+     */
+    public String buildContingencyResponse(Throwable e) {
+        String msg = (e.getMessage() != null && !e.getMessage().isBlank()) ? e.getMessage() : e.getClass().getSimpleName();
+        String lowerMsg = msg.toLowerCase();
+
+        boolean isTimeout = e instanceof java.net.SocketTimeoutException
+                || e instanceof java.net.http.HttpTimeoutException
+                || lowerMsg.contains("timeout")
+                || lowerMsg.contains("timed out")
+                || (e.getCause() != null && e.getCause().toString().toLowerCase().contains("timeout"));
+
+        boolean isConnectionError = e instanceof java.net.ConnectException
+                || lowerMsg.contains("connection refused")
+                || lowerMsg.contains("connect")
+                || (e.getCause() != null && e.getCause().toString().toLowerCase().contains("connect"));
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("⚠️ **Error en el Asistente IA:** Modo Contingencia — ");
+
+        if (isTimeout) {
+            sb.append("La inferencia con el modelo local de IA excedió el tiempo de espera configurado (120s).\n\n");
+            sb.append("### Motivo:\n");
+            sb.append("- La consulta es compleja o requirió múltiples herramientas consecutivas.\n");
+            sb.append("- El modelo local (`llama3.1`) está operando bajo alta carga de inferencia en CPU/GPU.\n\n");
+            sb.append("### Sugerencias:\n");
+            sb.append("1. Formula una pregunta más concreta (ej. consultar por un extintor específico o el RIF exacto del cliente).\n");
+            sb.append("2. Reintenta la consulta en unos momentos.\n\n");
+            sb.append("*Detalle técnico:* `").append(msg).append("`");
+        } else if (isConnectionError) {
+            sb.append("No fue posible establecer conexión con el motor local de IA (Ollama).\n\n");
+            sb.append("### Sugerencias de Verificación:\n");
+            sb.append("1. Asegúrate de que Ollama esté ejecutándose en `http://localhost:11434` (`ollama serve`).\n");
+            sb.append("2. Comprueba que el modelo `llama3.1` esté disponible localmente (`ollama list`).\n\n");
+            sb.append("*Detalle técnico:* `").append(msg).append("`");
+        } else {
+            sb.append(msg).append("\n\n");
+            sb.append("*Asegúrate de que Ollama esté ejecutándose con el modelo configurado (ej. llama3.1).*");
+        }
+
+        return sb.toString();
     }
 
     /**
@@ -181,33 +333,38 @@ public class ChatService {
         List<String> toolsUsed = new ArrayList<>();
         StringBuilder reply = new StringBuilder();
 
-        if (prompt.contains("vencid") || prompt.contains("expirad") || prompt.contains("mantenimiento") || prompt.contains("extintor")) {
-            toolsUsed.add("tool_sql_customer_history");
-            LocalDate threshold = LocalDate.now();
-            List<CustomerEquipment> expired = customerEquipmentRepository.findByExpirationDateBefore(threshold);
+        try {
+            if (prompt.contains("vencid") || prompt.contains("expirad") || prompt.contains("mantenimiento") || prompt.contains("extintor")) {
+                toolsUsed.add("tool_sql_customer_history");
+                LocalDate threshold = LocalDate.now();
+                List<CustomerEquipment> expired = customerEquipmentRepository.findByExpirationDateBefore(threshold);
 
-            if (expired.isEmpty()) {
-                reply.append("Actualmente no se registran clientes con extintores o equipos vencidos.");
+                if (expired.isEmpty()) {
+                    reply.append("Actualmente no se registran clientes con extintores o equipos vencidos.");
+                } else {
+                    reply.append(String.format("Se encontraron %d equipo(s) con fecha de recarga vencida o por vencer:%n", expired.size()));
+                    for (int i = 0; i < Math.min(expired.size(), 10); i++) {
+                        CustomerEquipment eq = expired.get(i);
+                        reply.append(String.format("- %s (RIF/ID: %s): %s, venció el %s.%n",
+                                eq.getCustomer().getBusinessName(),
+                                eq.getCustomer().getTaxId(),
+                                eq.getEquipmentType(),
+                                eq.getExpirationDate()));
+                    }
+                    if (expired.size() > 10) {
+                        reply.append(String.format("... y %d equipos adicionales.", expired.size() - 10));
+                    }
+                }
+            } else if (prompt.contains("cliente") || prompt.contains("total")) {
+                toolsUsed.add("tool_sql_customer_history");
+                long totalCustomers = customerRepository.count();
+                reply.append(String.format("En el sistema se encuentran registrados %d clientes en total.", totalCustomers));
             } else {
-                reply.append(String.format("Se encontraron %d equipo(s) con fecha de recarga vencida o por vencer:%n", expired.size()));
-                for (int i = 0; i < Math.min(expired.size(), 10); i++) {
-                    CustomerEquipment eq = expired.get(i);
-                    reply.append(String.format("- %s (RIF/ID: %s): %s, venció el %s.%n",
-                            eq.getCustomer().getBusinessName(),
-                            eq.getCustomer().getTaxId(),
-                            eq.getEquipmentType(),
-                            eq.getExpirationDate()));
-                }
-                if (expired.size() > 10) {
-                    reply.append(String.format("... y %d equipos adicionales.", expired.size() - 10));
-                }
+                reply.append("Hola. Soy tu Asistente de Gestión Contra Incendios (MCP). Puedes consultarme sobre clientes, extintores vencidos, catálogo de productos y servicios o historial de cotizaciones.");
             }
-        } else if (prompt.contains("cliente") || prompt.contains("total")) {
-            toolsUsed.add("tool_sql_customer_history");
-            long totalCustomers = customerRepository.count();
-            reply.append(String.format("En el sistema se encuentran registrados %d clientes en total.", totalCustomers));
-        } else {
-            reply.append("Hola. Soy tu Asistente de Gestión Contra Incendios (MCP). Puedes consultarme sobre clientes, extintores vencidos, catálogo de productos y servicios o historial de cotizaciones.");
+        } catch (Exception e) {
+            log.error("ChatService: Error processing rule-based chat prompt: {}", e.getMessage(), e);
+            reply = new StringBuilder("⚠️ **Modo Contingencia:** Ocurrió un error al procesar los datos locales: ").append(e.getMessage());
         }
 
         return new ChatResponseDto(
