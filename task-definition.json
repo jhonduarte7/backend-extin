@@ -1,7 +1,3 @@
-# ==============================================================================
-# Sample Amazon ECS Task Definition Template for Equi-Extin Backend
-# Launch Type: AWS Fargate (Serverless Container Management)
-# ==============================================================================
 {
   "family": "equi-extin-backend-task",
   "networkMode": "awsvpc",
@@ -37,12 +33,36 @@
           "value": "postgres"
         },
         {
+          "name": "DB_PASSWORD",
+          "value": "B3D17P9ANFCqmfwI"
+        },
+        {
+          "name": "APP_ADMIN_PASSWORD",
+          "value": "adminpassword"
+        },
+        {
+          "name": "APP_USER_PASSWORD",
+          "value": "userpassword"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "venefast-secret-key-for-jwt-token-signing-super-secure"
+        },
+        {
+          "name": "JWT_EXPIRATION_MS",
+          "value": "86400000"
+        },
+        {
           "name": "JPA_HIBERNATE_DDL_AUTO",
           "value": "update"
         },
         {
           "name": "PGVECTOR_INIT_SCHEMA",
           "value": "true"
+        },
+        {
+          "name": "PGVECTOR_DIMENSIONS",
+          "value": "384"
         },
         {
           "name": "COOKIE_SECURE",

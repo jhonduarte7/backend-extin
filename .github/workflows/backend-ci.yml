@@ -95,10 +95,12 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
         run: |
           echo "Attempting to retrieve active task definition '$TASK_DEFINITION_NAME' from Amazon ECS..."
-          if aws ecs describe-task-definition --task-definition "$TASK_DEFINITION_NAME" --region "$AWS_REGION" --query taskDefinition > task-definition.json 2>/dev/null; then
+          if aws ecs describe-task-definition --task-definition "$TASK_DEFINITION_NAME" --region "$AWS_REGION" --query taskDefinition > temp-task-def.json 2>/dev/null && [ -s temp-task-def.json ]; then
             echo "Successfully downloaded active task definition from AWS ECS."
-          elif [ -f "task-definition.json" ]; then
+            mv temp-task-def.json task-definition.json
+          elif [ -f "task-definition.json" ] && [ -s "task-definition.json" ]; then
             echo "Using repository task-definition.json file as template."
+            rm -f temp-task-def.json
           else
             echo "Error: No task definition found in AWS ECS or repository."
             exit 1
