@@ -20,6 +20,7 @@ import com.extin.backend.repositories.QuoteRepository;
 import com.extin.backend.repositories.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -54,6 +55,12 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.security.seed.admin-password:password123}")
+    private String adminPassword;
+
+    @Value("${app.security.seed.user-password:password123}")
+    private String userPassword;
 
     public DatabaseSeeder(CustomerRepository customerRepository,
                           CatalogItemRepository catalogItemRepository,
@@ -110,13 +117,13 @@ public class DatabaseSeeder implements CommandLineRunner {
     private void seedUsers() {
         User adminUser = new User(
                 "admin",
-                passwordEncoder.encode("adminpassword"),
+                passwordEncoder.encode(adminPassword),
                 "admin@extin.com",
                 Role.ADMIN
         );
         User standardUser = new User(
                 "user",
-                passwordEncoder.encode("userpassword"),
+                passwordEncoder.encode(userPassword),
                 "user@extin.com",
                 Role.USER
         );

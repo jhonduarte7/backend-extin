@@ -1,27 +1,38 @@
+# ==============================================================================
+# Equi-Extin Backend Application Configuration
+# Sensitive credentials are strictly injected via environment variables (.env)
+# ==============================================================================
 server:
   port: ${SERVER_PORT:8090}
 
 spring:
   application:
-    name: backend-extin
+    name: backend-api
+
+  # Import environment variables from .env file if present
+  config:
+    import:
+      - "optional:file:.env[.properties]"
+      - "optional:file:../.env[.properties]"
 
   servlet:
     multipart:
       max-file-size: 25MB
       max-request-size: 25MB
 
-  # HTTP Client global timeouts for RestClient and WebClient
   http:
     clients:
       connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:120s}
       read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:180s}
 
+  # PostgreSQL Database Configuration (Sensitive values injected strictly via environment variables)
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:fire_safety_db}}
-    username: ${DB_USER:admin}
-    password: ${DB_PASSWORD:adminpassword}
+    url: ${SUPABASE_DB_URL}
     driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
+  # JPA / Hibernate Configuration
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -51,15 +62,33 @@ spring:
           model: ${OLLAMA_EMBEDDING_MODEL:all-minilm}
     vectorstore:
       pgvector:
-        initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}
+        initialize-schema: ${PGVECTOR_INIT_SCHEMA:false}
         dimensions: ${PGVECTOR_DIMENSIONS:384}
         distance-type: COSINE_DISTANCE
         index-type: HNSW
 
+# Security & Seed Credentials (Variables configured in .env / environment)
+app:
+  security:
+    seed:
+      admin-password: ${APP_ADMIN_PASSWORD}
+      user-password: ${APP_USER_PASSWORD}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS}
+
 security:
   jwt:
-    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    secret: ${JWT_SECRET}
+    expiration-ms: ${JWT_EXPIRATION_MS}
+    cookie:
+      secure: ${COOKIE_SECURE:true}
+
+# Cross-Origin Cookie settings (Defaulted to None and Secure for Vercel <-> Render cross-domain authentication)
+cookie:
+  secure: ${COOKIE_SECURE:true}
+  same-site: ${COOKIE_SAMESITE:None}
 
 logging:
   level:

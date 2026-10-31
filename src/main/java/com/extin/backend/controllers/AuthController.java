@@ -39,7 +39,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
 
-    @Value("${security.jwt.cookie.secure:false}")
+    @Value("${cookie.secure:${security.jwt.cookie.secure:true}}")
     private boolean secureCookie;
 
     public AuthController(AuthenticationManager authenticationManager, JwtService jwtService) {
