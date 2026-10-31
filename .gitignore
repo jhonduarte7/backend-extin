@@ -1,12 +1,33 @@
-HELP.md
+# ==============================================================================
+# Equi-Extin Backend .gitignore
+# Strictly excludes environment files, secrets, IDEs, and build caches
+# ==============================================================================
+
+# --- Environment Variables & Local Secrets ---
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# --- Maven Build Artifacts & Dependencies ---
 target/
 META-INF/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 classpath.txt
+*.jar
+*.war
+*.class
 
-### STS ###
+# --- IDE & Editor Files ---
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
 .apt_generated
 .classpath
 .factorypath
@@ -14,14 +35,6 @@ classpath.txt
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
 /nbproject/private/
 /nbbuild/
 /dist/
@@ -31,5 +44,16 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
-.vscode/
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs, Cookies & Local Developer Tracking ---
+*.log
+logs/
+cookies.txt
+[Qq]uestion*
+QUESTION*
+question/
+HELP.md

@@ -1,5 +1,5 @@
 server:
-  port: 8090
+  port: ${SERVER_PORT:8090}
 
 spring:
   application:
@@ -13,20 +13,20 @@ spring:
   # HTTP Client global timeouts for RestClient and WebClient
   http:
     clients:
-      connect-timeout: 120s
-      read-timeout: 180s
+      connect-timeout: ${HTTP_CLIENT_CONNECT_TIMEOUT:120s}
+      read-timeout: ${HTTP_CLIENT_READ_TIMEOUT:180s}
 
   datasource:
-    url: jdbc:postgresql://localhost:5433/fire_safety_db
-    username: admin
-    password: adminpassword
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:fire_safety_db}}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:adminpassword}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -38,27 +38,32 @@ spring:
 
   ai:
     ollama:
-      base-url: http://localhost:11434
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       init:
-        timeout: 120s
+        timeout: ${AI_INIT_TIMEOUT:120s}
       chat:
         options:
-          model: llama3.1
-          timeout: 120s
+          model: ${OLLAMA_CHAT_MODEL:llama3.1}
+          timeout: ${AI_CHAT_TIMEOUT:120s}
       embedding:
-        model: all-minilm
+        model: ${OLLAMA_EMBEDDING_MODEL:all-minilm}
         options:
-          model: all-minilm
+          model: ${OLLAMA_EMBEDDING_MODEL:all-minilm}
     vectorstore:
       pgvector:
-        initialize-schema: true
-        dimensions: 384
+        initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}
+        dimensions: ${PGVECTOR_DIMENSIONS:384}
         distance-type: COSINE_DISTANCE
         index-type: HNSW
 
+security:
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
 logging:
   level:
-    root: INFO
-    com.extin.backend: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.extin.backend: ${LOG_LEVEL_APP:DEBUG}
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:DEBUG}
+    org.hibernate.orm.jdbc.bind: ${LOG_LEVEL_BIND:TRACE}
