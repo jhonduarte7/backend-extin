@@ -81,34 +81,48 @@ public class DatabaseSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        if (userRepository.count() == 0) {
+        long userCount = userRepository.count();
+        long customerCount = customerRepository.count();
+        long catalogCount = catalogItemRepository.count();
+        long quoteCount = quoteRepository.count();
+
+        // 1. Global check: If all core tables already have data, skip seeding entirely
+        if (userCount > 0 && customerCount > 0 && catalogCount > 0 && quoteCount > 0) {
+            log.info("DatabaseSeeder: Tables already populated (Users: {}, Customers: {}, Catalog: {}, Quotes: {}). Skipping all seed operations to protect database integrity.",
+                    userCount, customerCount, catalogCount, quoteCount);
+            syncAdminPassword();
+            return;
+        }
+
+        // 2. Granular checks: Only insert if the respective table is completely empty (count == 0)
+        if (userCount == 0) {
             log.info("Users table is empty. Seeding default ADMIN and USER accounts...");
             seedUsers();
         } else {
-            log.info("Database already contains users ({} records). Skipping user seeding.", userRepository.count());
+            log.info("Database already contains users ({} records). Skipping user seeding.", userCount);
+            syncAdminPassword();
         }
 
-        if (customerRepository.count() == 0) {
+        if (customerCount == 0) {
             log.info("Customers table is empty. Starting customer seeding...");
             seedCustomers();
         } else {
-            log.info("Database already contains customer data ({} records). Skipping customer seeding.", customerRepository.count());
+            log.info("Database already contains customer data ({} records). Skipping customer seeding.", customerCount);
         }
 
-        if (catalogItemRepository.count() == 0) {
+        if (catalogCount == 0) {
             log.info("Catalog table is empty. Starting catalog seeding...");
             seedCatalog();
         } else {
-            log.info("Database already contains catalog data ({} records). Skipping catalog seeding.", catalogItemRepository.count());
+            log.info("Database already contains catalog data ({} records). Skipping catalog seeding.", catalogCount);
             System.out.println("Datos iniciales ya existen. Saltando inicialización.");
         }
 
-        if (quoteRepository.count() == 0 || invoiceRepository.count() == 0) {
+        if (quoteCount == 0 && invoiceRepository.count() == 0) {
             log.info("Starting quote and invoice seeding for API and Postman testing...");
             seedQuotesAndInvoices();
         } else {
-            log.info("Database already contains quotes ({} records) and invoices ({} records).",
-                    quoteRepository.count(), invoiceRepository.count());
+            log.info("Database already contains quotes/invoices. Skipping quote and invoice seeding.");
         }
 
         log.info("DatabaseSeeder initialization complete.");
@@ -129,6 +143,17 @@ public class DatabaseSeeder implements CommandLineRunner {
         );
         userRepository.saveAll(List.of(adminUser, standardUser));
         log.info("Seeded initial users: admin (Role.ADMIN), user (Role.USER).");
+    }
+
+    private void syncAdminPassword() {
+        userRepository.findByUsername("admin").ifPresent(admin -> {
+            if (!passwordEncoder.matches(adminPassword, admin.getPassword())) {
+                log.info("Updating admin user password in database to match configured APP_ADMIN_PASSWORD...");
+                admin.setPassword(passwordEncoder.encode(adminPassword));
+                userRepository.save(admin);
+                log.info("Admin user password synchronized successfully.");
+            }
+        });
     }
 
     private void seedCustomers() {

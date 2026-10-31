@@ -1,4 +1,4 @@
-name: Backend CI
+name: Backend CI/CD - Build & Deploy to Amazon ECS (AWS Fargate)
 
 on:
   push:
@@ -7,9 +7,17 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  build:
+  # ----------------------------------------------------------------------------
+  # Job 1: Compilación y Verificación del Backend con Maven
+  # ----------------------------------------------------------------------------
+  build-and-test:
     name: Build & Verify Backend (Maven)
     runs-on: ubuntu-latest
 
@@ -24,8 +32,92 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Grant execute permission for mvnw
+      - name: Grant execute permission for Maven Wrapper
         run: chmod +x mvnw
 
-      - name: Build with Maven
+      - name: Compile and Package with Maven
         run: ./mvnw clean package -DskipTests
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Construcción Docker, Push a Amazon ECR y Despliegue en Amazon ECS
+  # ----------------------------------------------------------------------------
+  deploy:
+    name: Build Docker Image & Deploy to Amazon ECS
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Paso 1: Autenticación oficial en AWS mediante GitHub Secrets
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
+
+      # Paso 2: Iniciar sesión en Amazon ECR
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Paso 3: Construir imagen Docker, etiquetar con commit SHA y latest, y hacer push a Amazon ECR
+      - name: Build, tag, and push Docker image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'equi-extin-backend' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
+          echo "Pushing Docker image to Amazon ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Exportar la URI de la nueva imagen para el siguiente paso de renderizado
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # Paso 4: Obtener la definición de la tarea (Task Definition) activa
+      - name: Download active task definition from ECS or use local template
+        env:
+          TASK_DEFINITION_NAME: ${{ secrets.ECS_TASK_DEFINITION || 'equi-extin-backend-task' }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
+        run: |
+          echo "Attempting to retrieve active task definition '$TASK_DEFINITION_NAME' from Amazon ECS..."
+          if aws ecs describe-task-definition --task-definition "$TASK_DEFINITION_NAME" --region "$AWS_REGION" --query taskDefinition > task-definition.json 2>/dev/null; then
+            echo "Successfully downloaded active task definition from AWS ECS."
+          elif [ -f "task-definition.json" ]; then
+            echo "Using repository task-definition.json file as template."
+          else
+            echo "Error: No task definition found in AWS ECS or repository."
+            exit 1
+          fi
+
+      # Paso 5: Renderizar la definición de tarea inyectando la nueva URI de la imagen Docker
+      - name: Render Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ secrets.ECS_CONTAINER_NAME || 'equi-extin-backend' }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      # Paso 6: Desplegar en el servicio de Amazon ECS (AWS Fargate)
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ secrets.ECS_SERVICE || 'equi-extin-backend-service' }}
+          cluster: ${{ secrets.ECS_CLUSTER || 'equi-extin-cluster' }}
+          wait-for-service-stability: true

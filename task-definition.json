@@ -1,0 +1,66 @@
+# ==============================================================================
+# Sample Amazon ECS Task Definition Template for Equi-Extin Backend
+# Launch Type: AWS Fargate (Serverless Container Management)
+# ==============================================================================
+{
+  "family": "equi-extin-backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::827021007929:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "equi-extin-backend",
+      "image": "827021007929.dkr.ecr.us-east-2.amazonaws.com/equi-extin-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8090,
+          "hostPort": 8090,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "8090"
+        },
+        {
+          "name": "DB_URL",
+          "value": "jdbc:postgresql://equi-extin-db.cvksgc0eylu6.us-east-2.rds.amazonaws.com:5432/postgres?sslmode=require"
+        },
+        {
+          "name": "DB_USERNAME",
+          "value": "postgres"
+        },
+        {
+          "name": "JPA_HIBERNATE_DDL_AUTO",
+          "value": "update"
+        },
+        {
+          "name": "PGVECTOR_INIT_SCHEMA",
+          "value": "true"
+        },
+        {
+          "name": "COOKIE_SECURE",
+          "value": "true"
+        },
+        {
+          "name": "COOKIE_SAMESITE",
+          "value": "None"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/equi-extin-backend",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

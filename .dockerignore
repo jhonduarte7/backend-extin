@@ -1,0 +1,26 @@
+# ==============================================================================
+# Docker Ignore for Equi-Extin Backend
+# Excludes local environments, caches, and build outputs from Docker build context
+# ==============================================================================
+
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+target/
+*.jar
+*.war
+.idea/
+.vscode/
+*.iml
+.mvn/wrapper/maven-wrapper.jar
+*.log
+logs/
+cookies.txt
+[Qq]uestion*
+QUESTION*
+aws-setting*
+learning*
+Dockerfile*
+.dockerignore

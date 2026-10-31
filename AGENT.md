@@ -134,3 +134,38 @@ All Git commit messages MUST follow the [Conventional Commits](https://www.conve
 - `docs(scope): update documentation or specifications`
 - `test(scope): add or modify test coverage`
 - `ci(scope): update GitHub Actions workflow or build scripts`
+
+---
+
+## 8. Database Integrity & AWS RDS Standards
+
+### 8.1 Hibernate DDL Protection
+- In production / AWS RDS, `spring.jpa.hibernate.ddl-auto` MUST be set to `update` or `none` (configured via `${JPA_HIBERNATE_DDL_AUTO:update}`).
+- **NEVER use `create` or `create-drop`** outside of isolated H2 test profiles, ensuring existing tables and persistent data are never cleared on application restarts.
+
+### 8.2 Strict Conditional Data Seeding
+- Any database seeder implementing `CommandLineRunner` or `ApplicationRunner` (such as `DatabaseSeeder` and `DataInitializer`) MUST strictly check if tables already contain data (`repository.count() == 0`) before inserting.
+- If data already exists, the seeder MUST log an informational message and skip all insert operations, preventing duplication.
+
+### 8.3 Vector Database (`pgvector`) Initialization
+- Spring AI requires the `pgvector` extension and `vector_store` table.
+- Set `spring.ai.vectorstore.pgvector.initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}` in `application.yml`.
+- `JpaConfig` executes `CREATE EXTENSION IF NOT EXISTS vector;` on startup with non-fatal exception handling for in-memory test databases (H2).
+- Manual SQL verification query:
+  ```sql
+  SELECT * FROM pg_extension WHERE extname = 'vector';
+  ```
+
+---
+
+## 9. Agent Operational Rules & Git Workflow
+
+### 9.1 Zero Auto-Commit & Zero Auto-Push Policy
+- **MANDATORY:** AI agents must **NEVER** execute `git commit` or `git push` automatically.
+- All code modifications must be implemented and tested locally (`./mvnw test`, `npm run build`), leaving modified files in the local working directory.
+- The human developer maintains exclusive control over reviewing diffs, writing commit messages, and pushing to remote branches.
+
+### 9.2 Strict Environment Isolation (.env)
+- `.env` files belong exclusively in the root directory of the respective sub-project (`backend-extin/.env` or `frontend-extin/.env`).
+- Never create a `.env` file in the umbrella root repository.
+- Sensitive credentials must strictly be injected via environment variables and never committed to Git.

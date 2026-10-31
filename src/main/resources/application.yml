@@ -3,17 +3,15 @@
 # Sensitive credentials are strictly injected via environment variables (.env)
 # ==============================================================================
 server:
-  port: ${SERVER_PORT:8090}
+  port: ${PORT:${SERVER_PORT:8090}}
 
 spring:
   application:
     name: backend-api
 
-  # Import environment variables from .env file if present
+  # Import environment variables from local .env file if present
   config:
-    import:
-      - "optional:file:.env[.properties]"
-      - "optional:file:../.env[.properties]"
+    import: "optional:file:.env[.properties]"
 
   servlet:
     multipart:
@@ -27,7 +25,7 @@ spring:
 
   # PostgreSQL Database Configuration (Sensitive values injected strictly via environment variables)
   datasource:
-    url: ${SUPABASE_DB_URL}
+    url: ${DB_URL}
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
@@ -62,7 +60,7 @@ spring:
           model: ${OLLAMA_EMBEDDING_MODEL:all-minilm}
     vectorstore:
       pgvector:
-        initialize-schema: ${PGVECTOR_INIT_SCHEMA:false}
+        initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}
         dimensions: ${PGVECTOR_DIMENSIONS:384}
         distance-type: COSINE_DISTANCE
         index-type: HNSW
