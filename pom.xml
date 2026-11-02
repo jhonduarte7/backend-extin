@@ -78,7 +78,8 @@
 			<scope>runtime</scope>
 		</dependency>
 
-		<!-- Spring AI Starters -->
+		<!-- Spring AI Starters (Ollama & OpenAI) -->
+		<!-- Note: In Spring AI 2.0.1 (BOM), the official OpenAI starter artifact is spring-ai-starter-model-openai (renamed from legacy spring-ai-openai-spring-boot-starter) -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-ollama</artifactId>
