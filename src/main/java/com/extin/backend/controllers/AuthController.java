@@ -11,6 +11,8 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -68,13 +70,15 @@ public class AuthController {
 
         boolean isSecure = secureCookie || httpRequest.isSecure();
 
-        Cookie jwtCookie = new Cookie(JwtAuthenticationFilter.JWT_COOKIE_NAME, token);
-        jwtCookie.setHttpOnly(true);
-        jwtCookie.setSecure(isSecure);
-        jwtCookie.setPath("/");
-        jwtCookie.setMaxAge((int) (jwtService.getExpirationMs() / 1000));
+        ResponseCookie jwtCookie = ResponseCookie.from(JwtAuthenticationFilter.JWT_COOKIE_NAME, token)
+                .httpOnly(true)
+                .secure(isSecure)
+                .path("/")
+                .maxAge(jwtService.getExpirationMs() / 1000)
+                .sameSite(isSecure ? "None" : "Lax")
+                .build();
 
-        httpResponse.addCookie(jwtCookie);
+        httpResponse.addHeader(HttpHeaders.SET_COOKIE, jwtCookie.toString());
 
         String role = userDetails.getAuthorities().stream()
                 .findFirst()
@@ -84,7 +88,9 @@ public class AuthController {
 
         log.info("User '{}' authenticated successfully with role '{}'", userDetails.getUsername(), role);
 
-        return ResponseEntity.ok(new LoginResponseDto("Login successful", userDetails.getUsername(), role));
+        return ResponseEntity.ok()
+                .header("X-Auth-Token", token)
+                .body(new LoginResponseDto("Login successful", userDetails.getUsername(), role));
     }
 
     /**
@@ -97,13 +103,15 @@ public class AuthController {
     ) {
         boolean isSecure = secureCookie || httpRequest.isSecure();
 
-        Cookie jwtCookie = new Cookie(JwtAuthenticationFilter.JWT_COOKIE_NAME, "");
-        jwtCookie.setHttpOnly(true);
-        jwtCookie.setSecure(isSecure);
-        jwtCookie.setPath("/");
-        jwtCookie.setMaxAge(0);
+        ResponseCookie jwtCookie = ResponseCookie.from(JwtAuthenticationFilter.JWT_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(isSecure)
+                .path("/")
+                .maxAge(0)
+                .sameSite(isSecure ? "None" : "Lax")
+                .build();
 
-        httpResponse.addCookie(jwtCookie);
+        httpResponse.addHeader(HttpHeaders.SET_COOKIE, jwtCookie.toString());
 
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }

@@ -70,6 +70,9 @@ public class ChatService {
     private final CustomerRepository customerRepository;
     private final List<ToolCallback> uniqueToolCallbacks;
 
+    @org.springframework.beans.factory.annotation.Value("${spring.ai.model.chat:ollama}")
+    private String modelProvider = "ollama";
+
     /**
      * Primary constructor injecting ChatClient.Builder, tools, repositories, and ChatMemory.
      */
@@ -278,27 +281,38 @@ public class ChatService {
                 || lowerMsg.contains("connect")
                 || (e.getCause() != null && e.getCause().toString().toLowerCase().contains("connect"));
 
+        boolean isOpenAi = "openai".equalsIgnoreCase(modelProvider);
         StringBuilder sb = new StringBuilder();
         sb.append("⚠️ **Error en el Asistente IA:** Modo Contingencia — ");
 
         if (isTimeout) {
             sb.append("La inferencia con el modelo local de IA excedió el tiempo de espera configurado (120s).\n\n");
             sb.append("### Motivo:\n");
-            sb.append("- La consulta es compleja o requirió múltiples herramientas consecutivas.\n");
-            sb.append("- El modelo local (`llama3.1`) está operando bajo alta carga de inferencia en CPU/GPU.\n\n");
+            sb.append("- La consulta es compleja o requirió múltiples herramientas consecutivas.\n\n");
             sb.append("### Sugerencias:\n");
-            sb.append("1. Formula una pregunta más concreta (ej. consultar por un extintor específico o el RIF exacto del cliente).\n");
+            sb.append("1. Formula una pregunta más concreta.\n");
             sb.append("2. Reintenta la consulta en unos momentos.\n\n");
             sb.append("*Detalle técnico:* `").append(msg).append("`");
         } else if (isConnectionError) {
-            sb.append("No fue posible establecer conexión con el motor local de IA (Ollama).\n\n");
-            sb.append("### Sugerencias de Verificación:\n");
-            sb.append("1. Asegúrate de que Ollama esté ejecutándose en `http://localhost:11434` (`ollama serve`).\n");
-            sb.append("2. Comprueba que el modelo `llama3.1` esté disponible localmente (`ollama list`).\n\n");
+            if (isOpenAi) {
+                sb.append("No fue posible establecer conexión con los servidores remotos de OpenAI.\n\n");
+                sb.append("### Sugerencias de Verificación:\n");
+                sb.append("1. Comprueba la conectividad de salida hacia `https://api.openai.com/v1`.\n");
+                sb.append("2. Verifica las credenciales de API de OpenAI (`OPEN_IA_CHAT_KEY`).\n\n");
+            } else {
+                sb.append("No fue posible establecer conexión con el motor local de IA (Ollama).\n\n");
+                sb.append("### Sugerencias de Verificación:\n");
+                sb.append("1. Asegúrate de que Ollama esté ejecutándose en `http://localhost:11434` (`ollama serve`).\n");
+                sb.append("2. Comprueba que el modelo esté disponible localmente (`ollama list`).\n\n");
+            }
             sb.append("*Detalle técnico:* `").append(msg).append("`");
         } else {
             sb.append(msg).append("\n\n");
-            sb.append("*Asegúrate de que Ollama esté ejecutándose con el modelo configurado (ej. llama3.1).*");
+            if (isOpenAi) {
+                sb.append("*Verifique la disponibilidad de OpenAI y la configuración de API keys en producción.*");
+            } else {
+                sb.append("*Asegúrate de que Ollama esté ejecutándose con el modelo local configurado.*");
+            }
         }
 
         return sb.toString();

@@ -107,7 +107,7 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true); // Mandatory for HttpOnly cookies
-        configuration.setExposedHeaders(List.of("Set-Cookie", "X-Chat-Id"));
+        configuration.setExposedHeaders(List.of("Set-Cookie", "X-Chat-Id", "X-Auth-Token", "Authorization"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

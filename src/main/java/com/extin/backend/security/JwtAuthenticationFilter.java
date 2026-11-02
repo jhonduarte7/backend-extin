@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        String token = extractTokenFromCookies(request);
+        String token = extractToken(request);
 
         if (token != null && !token.isBlank()) {
             try {
@@ -59,16 +59,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         );
                         authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(authToken);
-                        log.debug("Successfully authenticated user '{}' with authorities {} from cookie",
+                        log.debug("Successfully authenticated user '{}' with authorities {}",
                                 username, userDetails.getAuthorities());
                     }
                 }
             } catch (Exception ex) {
-                log.debug("Failed to authenticate JWT from cookie '{}': {}", JWT_COOKIE_NAME, ex.getMessage());
+                log.debug("Failed to authenticate JWT: {}", ex.getMessage());
             }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String authHeader = request.getHeader(org.springframework.http.HttpHeaders.AUTHORIZATION);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7).trim();
+        }
+        String xAuthToken = request.getHeader("X-Auth-Token");
+        if (xAuthToken != null && !xAuthToken.isBlank()) {
+            return xAuthToken.trim();
+        }
+        return extractTokenFromCookies(request);
     }
 
     private String extractTokenFromCookies(HttpServletRequest request) {
