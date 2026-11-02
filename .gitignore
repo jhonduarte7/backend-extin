@@ -52,10 +52,15 @@ desktop.ini
 # --- Logs, Cookies & Local Developer Tracking ---
 *.log
 logs/
-cookies.txt
+cookies*.txt
 [Qq]uestion*
 QUESTION*
 question/
 learning*
 learning_proposal.md
 HELP.md
+
+# --- Generated PDF Reports & Documents ---
+*.pdf
+**/*.pdf
+
