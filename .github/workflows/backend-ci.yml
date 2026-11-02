@@ -88,25 +88,22 @@ jobs:
           # Exportar la URI de la nueva imagen para el siguiente paso de renderizado
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Paso 4: Obtener la definición de la tarea (Task Definition) activa
-      - name: Download active task definition from ECS or use local template
+      # Paso 4: Preparar la definición de la tarea (Task Definition) e inyectar secretos de OpenAI
+      - name: Prepare task definition
         env:
-          TASK_DEFINITION_NAME: ${{ secrets.ECS_TASK_DEFINITION || 'equi-extin-backend-task' }}
-          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
+          OPEN_IA_CHAT_KEY: ${{ secrets.OPEN_IA_CHAT_KEY }}
+          OPEN_IA_EMBEBEDDINGS_KEY: ${{ secrets.OPEN_IA_EMBEBEDDINGS_KEY }}
         run: |
-          echo "Attempting to retrieve active task definition '$TASK_DEFINITION_NAME' from Amazon ECS..."
-          if aws ecs describe-task-definition --task-definition "$TASK_DEFINITION_NAME" --region "$AWS_REGION" --query taskDefinition > temp-task-def.json 2>/dev/null && [ -s temp-task-def.json ]; then
-            echo "Successfully downloaded active task definition from AWS ECS."
-            mv temp-task-def.json task-definition.json
-          elif [ -f "task-definition.json" ] && [ -s "task-definition.json" ]; then
-            echo "Using repository task-definition.json file as template."
-            rm -f temp-task-def.json
-          else
-            echo "Error: No task definition found in AWS ECS or repository."
-            exit 1
+          echo "Preparing task definition template..."
+          # Reemplazar placeholders de secretos en task-definition.json si existen
+          if [ -n "$OPEN_IA_CHAT_KEY" ]; then
+            sed -i "s|\${{ secrets.OPEN_IA_CHAT_KEY }}|$OPEN_IA_CHAT_KEY|g" task-definition.json
+          fi
+          if [ -n "$OPEN_IA_EMBEBEDDINGS_KEY" ]; then
+            sed -i "s|\${{ secrets.OPEN_IA_EMBEBEDDINGS_KEY }}|$OPEN_IA_EMBEBEDDINGS_KEY|g" task-definition.json
           fi
 
-      # Paso 5: Renderizar la definición de tarea inyectando la nueva URI de la imagen Docker
+      # Paso 5: Renderizar la definición de tarea inyectando la nueva URI de la imagen Docker y variables
       - name: Render Amazon ECS task definition
         id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -114,6 +111,10 @@ jobs:
           task-definition: task-definition.json
           container-name: ${{ secrets.ECS_CONTAINER_NAME || 'equi-extin-backend' }}
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            SPRING_PROFILES_ACTIVE=prod
+            OPEN_IA_CHAT_KEY=${{ secrets.OPEN_IA_CHAT_KEY }}
+            OPEN_IA_EMBEBEDDINGS_KEY=${{ secrets.OPEN_IA_EMBEBEDDINGS_KEY }}
 
       # Paso 6: Desplegar en el servicio de Amazon ECS (AWS Fargate)
       - name: Deploy Amazon ECS task definition

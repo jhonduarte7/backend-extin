@@ -71,6 +71,18 @@
         {
           "name": "COOKIE_SAMESITE",
           "value": "None"
+        },
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "prod"
+        },
+        {
+          "name": "OPEN_IA_CHAT_KEY",
+          "value": "${{ secrets.OPEN_IA_CHAT_KEY }}"
+        },
+        {
+          "name": "OPEN_IA_EMBEBEDDINGS_KEY",
+          "value": "${{ secrets.OPEN_IA_EMBEBEDDINGS_KEY }}"
         }
       ],
       "logConfiguration": {

@@ -15,6 +15,14 @@ spring:
         format_sql: true
 
   ai:
+    model:
+      chat: ollama
+      embedding: ollama
+      audio:
+        speech: none
+        transcription: none
+      image: none
+      moderation: none
     ollama:
       base-url: http://localhost:11434
       embedding:

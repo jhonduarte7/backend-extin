@@ -1,0 +1,45 @@
+# ==============================================================================
+# Equi-Extin Backend - Production Profile Configuration (application-prod.yml)
+# Spring AI configured with OpenAI (Chat & Embeddings)
+# ==============================================================================
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: openai
+      audio:
+        speech: none
+        transcription: none
+      image: none
+      moderation: none
+
+    openai:
+      # General / Root API Key mapped strictly to ${OPEN_IA_CHAT_KEY}
+      api-key: ${OPEN_IA_CHAT_KEY}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+
+      # OpenAI Chat Configuration
+      chat:
+        api-key: ${OPEN_IA_CHAT_KEY}
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: ${OPENAI_CHAT_TEMPERATURE:0.7}
+
+      # OpenAI Embedding Configuration
+      embedding:
+        api-key: ${OPEN_IA_EMBEBEDDINGS_KEY:${OPEN_IA_CHAT_KEY}}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-ada-002}
+
+    vectorstore:
+      pgvector:
+        initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}
+        dimensions: ${PGVECTOR_DIMENSIONS:1536}
+        distance-type: COSINE_DISTANCE
+        index-type: HNSW
+
+logging:
+  level:
+    root: INFO
+    com.extin.backend: INFO
+    org.springframework.ai: INFO
