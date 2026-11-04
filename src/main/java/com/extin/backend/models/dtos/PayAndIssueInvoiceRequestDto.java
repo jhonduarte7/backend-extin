@@ -22,7 +22,6 @@ public record PayAndIssueInvoiceRequestDto(
         @JsonProperty("exchange_rate")
         BigDecimal exchangeRate,
 
-        @NotBlank(message = "payment_reference is required")
         @JsonProperty("payment_reference")
         String paymentReference,
 

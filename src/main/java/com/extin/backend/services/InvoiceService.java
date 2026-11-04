@@ -113,7 +113,10 @@ public class InvoiceService {
         invoice.setTotalAmountLocal(totalAmountLocal);
         invoice.setRateDate(rateDate);
         invoice.setIssueDate(rateDate);
-        invoice.setPaymentReference(requestDto.paymentReference());
+        String paymentRef = (requestDto.paymentReference() != null && !requestDto.paymentReference().isBlank())
+                ? requestDto.paymentReference().trim()
+                : "CONTADO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        invoice.setPaymentReference(paymentRef);
         invoice.setFiscalControlNumber("INV-" + LocalDate.now().getYear() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
 
         // 4. Immutable copy of items to invoice_details
@@ -161,10 +164,13 @@ public class InvoiceService {
     public InvoiceResponseDto generateInvoiceFromQuote(UUID quoteId) {
         Quote quote = quoteService.getQuoteById(quoteId);
 
-        // Check if invoice already exists for this quote
-        if (invoiceRepository.findByOriginQuoteId(quoteId).isPresent()
-                || invoiceRepository.findByQuoteId(quoteId).isPresent()) {
-            throw new IllegalStateException("An invoice has already been generated for quote ID: " + quoteId);
+        // Check if invoice already exists for this quote, return existing if present
+        java.util.Optional<Invoice> existingInvoice = invoiceRepository.findByOriginQuoteId(quoteId);
+        if (existingInvoice.isEmpty()) {
+            existingInvoice = invoiceRepository.findByQuoteId(quoteId);
+        }
+        if (existingInvoice.isPresent()) {
+            return invoiceMapper.toDto(existingInvoice.get());
         }
 
         // Transition quote status to INVOICED
@@ -215,7 +221,7 @@ public class InvoiceService {
      */
     @Transactional(readOnly = true)
     public Page<InvoiceResponseDto> getAllInvoices(Pageable pageable) {
-        return invoiceRepository.findAll(pageable).map(invoiceMapper::toPaidInvoiceDto);
+        return invoiceRepository.findAll(pageable).map(invoiceMapper::toDto);
     }
 
     /**
@@ -225,6 +231,6 @@ public class InvoiceService {
     public InvoiceResponseDto getInvoiceDtoById(UUID id) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found with ID: " + id));
-        return invoiceMapper.toPaidInvoiceDto(invoice);
+        return invoiceMapper.toDto(invoice);
     }
 }

@@ -4,6 +4,8 @@ import com.extin.backend.models.dtos.InvoiceResponseDto;
 import com.extin.backend.models.entities.Invoice;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 /**
  * Mapper responsible for transforming between Invoice entities and InvoiceResponseDto records.
  */
@@ -27,6 +29,9 @@ public class InvoiceMapper {
         String customerName = invoice.getCustomer() != null ? invoice.getCustomer().getBusinessName() : null;
         String customerTaxId = invoice.getCustomer() != null ? invoice.getCustomer().getTaxId() : null;
 
+        LocalDateTime rateDate = invoice.getRateDate() != null ? invoice.getRateDate() : invoice.getIssueDate();
+        LocalDateTime issueDate = invoice.getIssueDate() != null ? invoice.getIssueDate() : rateDate;
+
         return new InvoiceResponseDto(
                 invoice.getId() != null ? invoice.getId().toString() : null,
                 quoteIdStr,
@@ -39,43 +44,22 @@ public class InvoiceMapper {
                 invoice.getTaxAmount(),
                 invoice.getTotalAmountUsd(),
                 invoice.getTotalAmountLocal(),
-                invoice.getRateDate(),
+                rateDate,
                 invoice.getPaymentReference(),
                 invoice.getFiscalControlNumber(),
                 quoteIdStr,
                 customerName,
                 customerTaxId,
-                invoice.getIssueDate(),
+                issueDate,
                 invoice.getBaseCurrency(),
                 "Invoice generated successfully from quote."
         );
     }
 
     /**
-     * Converts a paid invoice into the exact Section 2.1 response format.
+     * Converts a paid invoice into the standardized response format with enriched fiscal metadata.
      */
     public InvoiceResponseDto toPaidInvoiceDto(Invoice invoice) {
-        if (invoice == null) {
-            return null;
-        }
-
-        String quoteIdStr = invoice.getQuote() != null ? invoice.getQuote().getId().toString() :
-                (invoice.getOriginQuote() != null ? invoice.getOriginQuote().getId().toString() : null);
-
-        return InvoiceResponseDto.forPaidInvoice(
-                invoice.getId() != null ? invoice.getId().toString() : null,
-                quoteIdStr,
-                invoice.getStatus() != null ? invoice.getStatus().name() : "PAID",
-                invoice.getTargetCurrency(),
-                invoice.getExchangeRate(),
-                invoice.getTotalAmountUsd(),
-                invoice.getTotalAmountLocal(),
-                invoice.getRateDate(),
-                invoice.getPaymentReference(),
-                invoice.getSubtotal(),
-                invoice.getAppliesIva(),
-                invoice.getTaxRate(),
-                invoice.getTaxAmount()
-        );
+        return toDto(invoice);
     }
 }
