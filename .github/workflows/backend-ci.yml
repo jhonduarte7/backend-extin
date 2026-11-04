@@ -113,6 +113,7 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
             SPRING_PROFILES_ACTIVE=prod
+            PGVECTOR_DIMENSIONS=1536
             OPEN_IA_CHAT_KEY=${{ secrets.OPEN_IA_CHAT_KEY }}
             OPEN_IA_EMBEBEDDINGS_KEY=${{ secrets.OPEN_IA_EMBEBEDDINGS_KEY }}
 

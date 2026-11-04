@@ -62,7 +62,7 @@
         },
         {
           "name": "PGVECTOR_DIMENSIONS",
-          "value": "384"
+          "value": "1536"
         },
         {
           "name": "COOKIE_SECURE",
